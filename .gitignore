@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# App logs and user data -- don't commit personal macros/backups
+sloth.log
+profiles/
+backups/
+stats/
+
+# Build output
+dist/
+build/
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Old copies / scratch files
+Sloth - Copy*.py
+Sloth_backup.py
+fix_corruption.py
+SESSION_SUMMARY.md
+ENHANCEMENT_SUMMARY.md
+FEATURE_RECOMMENDATIONS.md
+CODEBASE_ANALYSIS.md
+HOTKEY_THREAD_SAFETY_FIX.md
+*_old.md
+
+# Misc
+Thumbs.db
+.DS_Store

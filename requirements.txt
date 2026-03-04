@@ -1,0 +1,11 @@
+# Core dependencies (REQUIRED)
+PySide6>=6.5.0              # Qt GUI framework
+pynput>=1.7.6               # Keyboard and mouse control
+
+# Optional dependencies (for advanced features)
+pyautogui>=0.9.54           # Screen pixel detection and image matching
+opencv-python>=4.8.0        # Image recognition (required for image matching)
+Pillow>=10.0.0              # Image processing (used by pyautogui)
+psutil>=5.9.0               # System resource monitoring (CPU/RAM usage)
+pygetwindow>=0.0.9          # Window focus detection (Window Focus Check action)
+pytesseract>=0.3.10         # OCR wrapper for Skill Check Digits (requires tesseract.exe separately)
