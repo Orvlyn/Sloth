@@ -20,6 +20,15 @@ SlothFolder/
 
 ---
 
+## Previews
+
+![Home](Previews/Home.png)
+![Profile Manager](Previews/Profile.png)
+![Macro Editor](Previews/Macro%20Editor.png)
+![Settings](Previews/Settings.png)
+
+---
+
 ## What it does
 
 - Keyboard and mouse macros with loops, delays and conditionals
@@ -75,3 +84,4 @@ Profiles are stored as JSON files in `profiles/`. You can export them as `.sloth
 
 - Run as Administrator if hotkeys aren't working - some games block low-level input hooks
 - Using macros in online games may violate their Terms of Service. Use at your own risk
+
