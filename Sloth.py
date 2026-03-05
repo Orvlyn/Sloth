@@ -6,15 +6,17 @@ import threading
 import subprocess
 import logging
 import logging.handlers
+import urllib.request
+import urllib.error
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
+
 # ============================
 # BASE DIRECTORY HELPER
 # ============================
-
 def get_base_dir() -> str:
     """Return the directory next to Sloth.exe (frozen) or the script file (dev).
     All user data (profiles, backups, logs) is stored here so nothing ends up
@@ -23,6 +25,42 @@ def get_base_dir() -> str:
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
+
+def get_cached_icon() -> 'QIcon':
+    """Download icon from GitHub and cache it locally, or load from cache.
+    Falls back to default icon if download fails or cache is empty.
+    """
+    from PySide6.QtGui import QPixmap, QIcon
+    
+    base_dir = get_base_dir()
+    cache_path = os.path.join(base_dir, '.sloth_icon_cache.ico')
+    github_url = 'https://raw.githubusercontent.com/Orvlyn/Sloth/main/sloth.ico'
+    
+    # Try cache first
+    if os.path.exists(cache_path):
+        try:
+            icon = QIcon(cache_path)
+            if not icon.isNull():
+                logger.debug(f"Loaded icon from cache: {cache_path}")
+                return icon
+        except Exception as e:
+            logger.debug(f"Failed to load cached icon: {e}")
+    
+    # Try GitHub download
+    try:
+        logger.debug(f"Downloading icon from GitHub: {github_url}")
+        urllib.request.urlretrieve(github_url, cache_path)
+        icon = QIcon(cache_path)
+        if not icon.isNull():
+            logger.info("Icon downloaded and cached successfully")
+            return icon
+    except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        logger.debug(f"Failed to download icon from GitHub: {e}")
+    except Exception as e:
+        logger.debug(f"Unexpected error downloading icon: {e}")
+    
+    logger.warning("Could not load icon from cache or GitHub")
+    return QIcon()  # Return empty icon if all attempts fail
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -109,8 +147,8 @@ def _check_for_updates(on_result):
         url = data.get("url", "")
         if latest and latest != APP_VERSION:
             on_result(latest, url)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Update check failed: {e}")
 
 
 # ============================
@@ -119,12 +157,12 @@ def _check_for_updates(on_result):
 
 THEMES = {
 
-    # ══════════════════════════════════════════════════════════════
-    # NORMAL THEMES (10) - single dominant hue family, tight accent
-    # ══════════════════════════════════════════════════════════════
+    # --------------------------------------------------------------
+    # NORMAL THEMES (6) - single dominant hue family, tight accent
+    # --------------------------------------------------------------
 
     'midnight': {
-        'name': '🌙 Midnight',
+        'name': 'Midnight',
         'description': 'Normal: deep indigo foundation, balanced cyan accent',
         'bg_dark': '#0B1020', 'bg_medium': '#141B2D', 'border': '#24314A',
         'hover': '#1B2740', 'accent': '#4CC9F0', 'accent_text': '#04111A',
@@ -132,7 +170,7 @@ THEMES = {
         'scrollbar': '#1B2740', 'scrollbar_hover': '#2A3C5E'
     },
     'obsidian': {
-        'name': '🪨 Obsidian',
+        'name': 'Obsidian',
         'description': 'Normal: near-black charcoal, single clean teal pop',
         'bg_dark': '#0D0F0F', 'bg_medium': '#171C1C', 'border': '#263030',
         'hover': '#1D2828', 'accent': '#00B4A6', 'accent_text': '#00100E',
@@ -140,7 +178,7 @@ THEMES = {
         'scrollbar': '#1D2828', 'scrollbar_hover': '#2D3E3E'
     },
     'monokai': {
-        'name': '💻 Monokai Pro',
+        'name': 'Monokai Pro',
         'description': 'Normal: neutral dark charcoal, cool mint-cyan accent',
         'bg_dark': '#232428', 'bg_medium': '#2D2F35', 'border': '#4B4E57',
         'hover': '#3A3E48', 'accent': '#7CE7D0', 'accent_text': '#0F2520',
@@ -148,7 +186,7 @@ THEMES = {
         'scrollbar': '#3A3E48', 'scrollbar_hover': '#545A68'
     },
     'cyberpunk': {
-        'name': '⚡ Cyberpunk',
+        'name': 'Cyberpunk',
         'description': 'Normal: absolute near-black, neon magenta accent - high contrast pop',
         'bg_dark': '#0A0B12', 'bg_medium': '#131625', 'border': '#2C2F45',
         'hover': '#1C2140', 'accent': '#FF4FD8', 'accent_text': '#280727',
@@ -156,7 +194,7 @@ THEMES = {
         'scrollbar': '#1C2140', 'scrollbar_hover': '#2C3564'
     },
     'sakura': {
-        'name': '🌸 Sakura Night',
+        'name': 'Sakura Night',
         'description': 'Normal: deep plum base, soft orchid-blush accent - tight analogous pink',
         'bg_dark': '#17101E', 'bg_medium': '#231830', 'border': '#4A2D5C',
         'hover': '#35204A', 'accent': '#F4ABCC', 'accent_text': '#280A1C',
@@ -164,7 +202,7 @@ THEMES = {
         'scrollbar': '#35204A', 'scrollbar_hover': '#502D70'
     },
     'foxfire': {
-        'name': '🦊 Foxfire',
+        'name': 'Foxfire',
         'description': 'Normal: very dark walnut-brown, glowing amber accent - warm analogous',
         'bg_dark': '#110C07', 'bg_medium': '#1E1409', 'border': '#3F2C12',
         'hover': '#2E1E0A', 'accent': '#F09030', 'accent_text': '#220E00',
@@ -172,12 +210,12 @@ THEMES = {
         'scrollbar': '#2E1E0A', 'scrollbar_hover': '#4A2E12'
     },
 
-    # ═══════════════════════════════════════════════════════════════════
+    # -------------------------------------------------------------------
     # TWO-COLOR THEMES - complementary or split-complementary pairings
-    # ═══════════════════════════════════════════════════════════════════
+    # -------------------------------------------------------------------
 
     'synthwave': {
-        'name': '🌅 Synthwave',
+        'name': 'Synthwave',
         'description': 'Two-color: deep violet base, electric hot-pink accent - close split-complementary',
         'bg_dark': '#1A1233', 'bg_medium': '#251A45', 'border': '#4B2D7A',
         'hover': '#35235F', 'accent': '#FF6AD5', 'accent_text': '#2A0E2E',
@@ -185,7 +223,7 @@ THEMES = {
         'scrollbar': '#35235F', 'scrollbar_hover': '#55398A'
     },
     'nord': {
-        'name': '❄️ Nord Aurora',
+        'name': 'Nord Aurora',
         'description': 'Two-color: cool nordic slate-blue, warm amber accent - complementary warmth',
         'bg_dark': '#242933', 'bg_medium': '#2D3442', 'border': '#445063',
         'hover': '#364052', 'accent': '#EBCB8B', 'accent_text': '#1E232B',
@@ -193,7 +231,7 @@ THEMES = {
         'scrollbar': '#364052', 'scrollbar_hover': '#4B5A72'
     },
     'ocean': {
-        'name': '🌊 Ocean',
+        'name': 'Ocean',
         'description': 'Two-color: deep marine blue, warm coral accent - blue-orange complement',
         'bg_dark': '#0B1B2B', 'bg_medium': '#12314A', 'border': '#1F4A68',
         'hover': '#1A4460', 'accent': '#FF8A7A', 'accent_text': '#2B1210',
@@ -201,7 +239,7 @@ THEMES = {
         'scrollbar': '#1A4460', 'scrollbar_hover': '#286285'
     },
     'deepspace': {
-        'name': '💫 Deep Space',
+        'name': 'Deep Space',
         'description': 'Two-color: ultra-dark violet, electric cyan starlight - split-complementary',
         'bg_dark': '#0A0516', 'bg_medium': '#1A0A2E', 'border': '#440066',
         'hover': '#2D1B4E', 'accent': '#00D9FF', 'accent_text': '#001828',
@@ -209,7 +247,7 @@ THEMES = {
         'scrollbar': '#2D1B4E', 'scrollbar_hover': '#441D72'
     },
     'void': {
-        'name': '🌀 Void',
+        'name': 'Void',
         'description': 'Two-color: dark purple-black, vivid mint-green accent - split-complementary',
         'bg_dark': '#090514', 'bg_medium': '#120820', 'border': '#2C1A48',
         'hover': '#1C1038', 'accent': '#00F0A0', 'accent_text': '#001E14',
@@ -217,7 +255,7 @@ THEMES = {
         'scrollbar': '#1C1038', 'scrollbar_hover': '#2E1A55'
     },
     'plum_gold': {
-        'name': '👑 Plum and Gold',
+        'name': 'Plum and Gold',
         'description': 'Two-color: deep aubergine-plum base, burnished gold accent - luxury complement',
         'bg_dark': '#14091E', 'bg_medium': '#1F1030', 'border': '#48244A',
         'hover': '#2E1840', 'accent': '#DCA048', 'accent_text': '#22100A',
@@ -225,12 +263,12 @@ THEMES = {
         'scrollbar': '#2E1840', 'scrollbar_hover': '#442460'
     },
 
-    # ═══════════════════════════════════════════════════════════════
+    # ---------------------------------------------------------------
     # TRICOLOR THEMES - three distinct hue families in one palette
-    # ═══════════════════════════════════════════════════════════════
+    # ---------------------------------------------------------------
 
     'aurora': {
-        'name': '🌈 Aurora',
+        'name': 'Aurora',
         'description': 'Tricolor: deep violet base, arctic-teal mid, rose-pink accent',
         'bg_dark': '#0D0A1E', 'bg_medium': '#0A1A18', 'border': '#1E3830',
         'hover': '#142A24', 'accent': '#F06090', 'accent_text': '#2A0015',
@@ -238,7 +276,7 @@ THEMES = {
         'scrollbar': '#142A24', 'scrollbar_hover': '#1E3830'
     },
     'prism': {
-        'name': '💎 Prism',
+        'name': 'Prism',
         'description': 'Tricolor: deep navy base, jade-green mid, golden-amber accent',
         'bg_dark': '#080E1C', 'bg_medium': '#0C1C10', 'border': '#1C3A20',
         'hover': '#102A18', 'accent': '#F0AA30', 'accent_text': '#1E1000',
@@ -246,7 +284,7 @@ THEMES = {
         'scrollbar': '#102A18', 'scrollbar_hover': '#1C3A20'
     },
     'tigereye': {
-        'name': '🐯 Tiger Eye',
+        'name': 'Tiger Eye',
         'description': 'Tricolor: warm amber-black base, deep violet mid, electric teal accent - true triadic',
         'bg_dark': '#0E0C06', 'bg_medium': '#1A1430', 'border': '#342860',
         'hover': '#241E48', 'accent': '#00D8B0', 'accent_text': '#001A16',
@@ -254,7 +292,7 @@ THEMES = {
         'scrollbar': '#241E48', 'scrollbar_hover': '#342860'
     },
     'phosphor': {
-        'name': '📟 Phosphor',
+        'name': 'Phosphor',
         'description': 'Tricolor: near-black charcoal base, dark military-green mid, electric lime accent',
         'bg_dark': '#07080A', 'bg_medium': '#0C1810', 'border': '#183A18',
         'hover': '#103010', 'accent': '#60FF60', 'accent_text': '#041804',
@@ -262,12 +300,12 @@ THEMES = {
         'scrollbar': '#103010', 'scrollbar_hover': '#1A4818'
     },
 
-    # ══════════════════════════════════════════════════════════════════
-    # CUSTOM THEME - colors set by the user in Settings → Configure
-    # ══════════════════════════════════════════════════════════════════
+    # ------------------------------------------------------------------
+    # CUSTOM THEME - colors set by the user in Settings ⚙️ Configure
+    # ------------------------------------------------------------------
 
     'custom': {
-        'name': '🎨 Custom',
+        'name': 'Custom',
         'description': 'Your own personalized color scheme. Click "Configure" below to set every color.',
         'bg_dark': '#0B1020', 'bg_medium': '#141B2D', 'border': '#24314A',
         'hover': '#1B2740', 'accent': '#4CC9F0', 'accent_text': '#04111A',
@@ -755,7 +793,7 @@ def _generate_inventory_drop(items=27):
 
 ACTION_TEMPLATES = {
     # ====== OSRS (Old School RuneScape) ======
-    "🪨 OSRS: Copper Mining": [
+    "OSRS: Copper Mining": [
         {"action_type": "region_watcher", "x": 500, "y": 200, "width": 300, "height": 50, "target_color": "#808080", "tolerance": 25, "check_type": "appears", "description": "Wait for ore depleted", "enabled": True},
         {"action_type": "mouse_move", "x": 640, "y": 300, "relative": False, "duration": 250, "enabled": True},
         {"action_type": "delay", "duration": 1200, "randomize": True, "random_min": 1000, "random_max": 1500, "enabled": True},
@@ -763,14 +801,14 @@ ACTION_TEMPLATES = {
         {"action_type": "delay", "duration": 5500, "randomize": True, "random_min": 5000, "random_max": 6000, "enabled": True}
     ],
     
-    "⛏️ OSRS: AFK Fishing": [
+    "OSRS: AFK Fishing": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "mouse_click", "x": 400, "y": 350, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 5000, "randomize": True, "random_min": 4500, "random_max": 5500, "enabled": True},
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🏹 OSRS: Alching": [
+    "OSRS: Alching": [
         {"action_type": "loop_start", "count": 0, "enabled": True},
         {"action_type": "key", "key": "f1", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 200, "randomize": True, "random_min": 150, "random_max": 250, "enabled": True},
@@ -779,7 +817,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "📦 OSRS: Inventory Drop": [
+    "OSRS: Inventory Drop": [
         {"action_type": "loop_start", "count": 1, "enabled": True},
         {"action_type": "key", "key": "1", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "key", "key": "2", "hold_duration": 50, "press_type": "press", "enabled": True},
@@ -792,7 +830,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "💎 OSRS: Woodcutting": [
+    "OSRS: Woodcutting": [
         {"action_type": "region_watcher", "x": 350, "y": 150, "width": 200, "height": 200, "target_color": "#654321", "tolerance": 30, "check_type": "disappears", "description": "Wait for tree depleted", "enabled": True},
         {"action_type": "delay", "duration": 1000, "randomize": True, "random_min": 800, "random_max": 1200, "enabled": True},
         {"action_type": "mouse_move", "x": 450, "y": 250, "relative": False, "duration": 300, "enabled": True},
@@ -800,14 +838,14 @@ ACTION_TEMPLATES = {
         {"action_type": "delay", "duration": 3000, "randomize": True, "random_min": 2800, "random_max": 3200, "enabled": True}
     ],
     
-    "🏭 OSRS: Smithing": [
+    "OSRS: Smithing": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "key", "key": "space", "hold_duration": 100, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 1500, "randomize": True, "random_min": 1300, "random_max": 1700, "enabled": True},
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🔥 OSRS: Burning Logs": [
+    "OSRS: Burning Logs": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "mouse_move", "x": 700, "y": 400, "relative": False, "duration": 200, "enabled": True},
         {"action_type": "mouse_click", "x": 700, "y": 400, "button": "right", "clicks": 1, "enabled": True},
@@ -818,14 +856,14 @@ ACTION_TEMPLATES = {
     ],
     
     # ====== FiveM (GTA V Roleplay) ======
-    "🚗 FiveM: Auto Cruise": [
+    "FiveM: Auto Cruise": [
         {"action_type": "key", "key": "w", "hold_duration": 500, "press_type": "hold", "enabled": True},
         {"action_type": "delay", "duration": 30000, "randomize": True, "random_min": 25000, "random_max": 35000, "enabled": True},
         {"action_type": "mouse_move", "x": 960, "y": 700, "relative": False, "duration": 500, "enabled": True},
         {"action_type": "key", "key": "s", "hold_duration": 200, "press_type": "press", "enabled": True}
     ],
     
-    "💼 FiveM: Click Interaction": [
+    "FiveM: Click Interaction": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "key", "key": "e", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 2000, "randomize": True, "random_min": 1800, "random_max": 2200, "enabled": True},
@@ -834,14 +872,14 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🎰 FiveM: Slot Machine": [
+    "FiveM: Slot Machine": [
         {"action_type": "loop_start", "count": 50, "enabled": True},
         {"action_type": "key", "key": "e", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 1500, "randomize": True, "random_min": 1300, "random_max": 1700, "enabled": True},
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🏪 FiveM: Store Robbery": [
+    "FiveM: Store Robbery": [
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 3000, "randomize": True, "random_min": 2500, "random_max": 3500, "enabled": True},
         {"action_type": "key", "key": "e", "hold_duration": 50, "press_type": "press", "enabled": True},
@@ -850,14 +888,14 @@ ACTION_TEMPLATES = {
     ],
     
     # ====== Minecraft ======
-    "⛏️ Minecraft: Auto Mine": [
+    "Minecraft: Auto Mine": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 250, "randomize": True, "random_min": 200, "random_max": 300, "enabled": True},
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🧱 Minecraft: Block Builder": [
+    "Minecraft: Block Builder": [
         {"action_type": "loop_start", "count": 64, "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "right", "clicks": 1, "enabled": True},
         {"action_type": "key", "key": "w", "hold_duration": 100, "press_type": "press", "enabled": True},
@@ -865,7 +903,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🎣 Minecraft: AFK Fishing": [
+    "Minecraft: AFK Fishing": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "right", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 18000, "randomize": True, "random_min": 16000, "random_max": 20000, "enabled": True},
@@ -874,7 +912,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🌾 Minecraft: Farm Crop": [
+    "Minecraft: Farm Crop": [
         {"action_type": "loop_start", "count": 0, "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "key", "key": "w", "hold_duration": 150, "press_type": "press", "enabled": True},
@@ -883,7 +921,7 @@ ACTION_TEMPLATES = {
     ],
     
     # ====== World of Warcraft ======
-    "⚔️ WoW: Melee DPS Rotation": [
+    "WoW: Melee DPS Rotation": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "key", "key": "1", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 1500, "randomize": True, "random_min": 1300, "random_max": 1700, "enabled": True},
@@ -894,7 +932,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🧿 WoW: Gathering (Herb/Ore)": [
+    "WoW: Gathering (Herb/Ore)": [
         {"action_type": "loop_start", "count": 0, "enabled": True},
         {"action_type": "key", "key": "f", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 3000, "randomize": True, "random_min": 2800, "random_max": 3200, "enabled": True},
@@ -903,7 +941,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "💊 WoW: Healing Rotation": [
+    "WoW: Healing Rotation": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "key", "key": "4", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 2000, "randomize": True, "random_min": 1800, "random_max": 2200, "enabled": True},
@@ -913,7 +951,7 @@ ACTION_TEMPLATES = {
     ],
     
     # ====== Valorant / Competitive Shooters ======
-    "🎯 Valorant: Aim Practice": [
+    "Valorant: Aim Practice": [
         {"action_type": "loop_start", "count": 10, "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 500, "randomize": True, "random_min": 400, "random_max": 600, "enabled": True},
@@ -922,7 +960,7 @@ ACTION_TEMPLATES = {
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "🏃 Valorant: Ability Spam": [
+    "Valorant: Ability Spam": [
         {"action_type": "loop_start", "loop_type": "infinite", "enabled": True},
         {"action_type": "key", "key": "q", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 800, "randomize": True, "random_min": 700, "random_max": 900, "enabled": True},
@@ -932,21 +970,21 @@ ACTION_TEMPLATES = {
     ],
     
     # ====== General/Utility ======
-    "🔄 Click Loop": [
+    "Click Loop": [
         {"action_type": "loop_start", "count": 10, "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 500, "randomize": True, "random_min": 400, "random_max": 600, "enabled": True},
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "⌨️ Key Spam": [
+    "Key Spam": [
         {"action_type": "loop_start", "count": 10, "enabled": True},
         {"action_type": "key", "key": "space", "hold_duration": 50, "press_type": "press", "enabled": True},
         {"action_type": "delay", "duration": 100, "randomize": True, "random_min": 80, "random_max": 120, "enabled": True},
         {"action_type": "loop_end", "enabled": True}
     ],
     
-    "⏸️ Wait & Click": [
+    "Wait & Click": [
         {"action_type": "delay", "duration": 1000, "randomize": True, "random_min": 800, "random_max": 1200, "enabled": True},
         {"action_type": "mouse_click", "x": 960, "y": 540, "button": "left", "clicks": 1, "enabled": True},
         {"action_type": "delay", "duration": 500, "randomize": True, "random_min": 400, "random_max": 600, "enabled": True}
@@ -1269,7 +1307,23 @@ class MacroProfile:
     
     @staticmethod
     def from_dict(data: Dict) -> 'MacroProfile':
-        actions = [MacroAction.from_dict(a) for a in data.get('actions', [])]
+        # Basic validation
+        if not isinstance(data, dict):
+            raise ValueError("Profile data must be a dictionary")
+        if 'name' not in data:
+            logger.warning("Profile missing 'name' field, using default")
+        if 'actions' in data and not isinstance(data.get('actions'), list):
+            logger.warning("Profile 'actions' field is not a list, resetting to empty")
+            data['actions'] = []
+        
+        # Deserialize actions with error handling
+        actions = []
+        for idx, action_data in enumerate(data.get('actions', [])):
+            try:
+                actions.append(MacroAction.from_dict(action_data))
+            except Exception as e:
+                logger.warning(f"Skipping malformed action at index {idx}: {e}")
+        
         return MacroProfile(
             name=data.get('name', 'Untitled'),
             game=data.get('game', 'General'),
@@ -1312,10 +1366,17 @@ class MacroProfile:
     
     @staticmethod
     def load_from_file(filepath: str) -> 'MacroProfile':
-        """Load profile from JSON file."""
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return MacroProfile.from_dict(data)
+        """Load profile from JSON file with validation."""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return MacroProfile.from_dict(data)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in profile file {filepath}: {e}")
+            raise ValueError(f"Corrupt profile file: {filepath}") from e
+        except Exception as e:
+            logger.error(f"Failed to load profile from {filepath}: {e}")
+            raise
 
 # ============================
 # MACRO EXECUTOR (Worker Thread)
@@ -1388,10 +1449,16 @@ class MacroExecutor(QThread):
                 'f4': Key.f4, 'f5': Key.f5, 'f6': Key.f6,
                 'f7': Key.f7, 'f8': Key.f8, 'f9': Key.f9,
                 'f10': Key.f10, 'f11': Key.f11, 'f12': Key.f12,
-                'f13': Key.f13, 'f14': Key.f14, 'f15': Key.f15,
-                'f16': Key.f16, 'f17': Key.f17, 'f18': Key.f18,
-                'f19': Key.f19, 'f20': Key.f20,
             }
+            # Add f13-f20 only if available (pynput >= 1.6)
+            try:
+                self._key_map.update({
+                    'f13': Key.f13, 'f14': Key.f14, 'f15': Key.f15,
+                    'f16': Key.f16, 'f17': Key.f17, 'f18': Key.f18,
+                    'f19': Key.f19, 'f20': Key.f20,
+                })
+            except AttributeError:
+                logger.debug("F13-F20 keys not available in this pynput version")
         except ImportError:
             self.has_pynput = False
             logger.warning("pynput not installed - macro execution disabled")
@@ -2378,18 +2445,18 @@ class HelpDialog(QDialog):
     <table width="100%" cellspacing="8" cellpadding="10" style="border-collapse:separate;">
         <tr>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
-                <h3 style="margin:0 0 8px 0; color:{accent};">🚀 Quick Start</h3>
+                <h3 style="margin:0 0 8px 0; color:{accent};">Quick Start</h3>
                 <ol style="margin:0; padding-left:18px; color:{text_primary};">
                     <li><b>Profile Manager</b> - create a profile, set name, game, hotkey, loop mode.</li>
                     <li><b>Macro Editor</b> - insert a template or add actions manually.</li>
-                    <li>Pick coordinates with the <b>👁 Pick</b> button (cross-hair overlay).</li>
-                    <li>Click <b>▶ Test Run</b> to verify behavior before going live.</li>
+                    <li>Pick coordinates with the <b>Pick</b> button (cross-hair overlay).</li>
+                    <li>Click <b>▶️ Test Run</b> to verify behavior before going live.</li>
                     <li>Press your configured <b>hotkey</b> (e.g. F6) to start/stop from anywhere.</li>
-                    <li>Enable <b>✨ Humanized Timings</b> to randomize delays automatically.</li>
+                    <li>Enable <b>🎲 Humanized Timings</b> to randomize delays automatically.</li>
                 </ol>
             </td>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
-                <h3 style="margin:0 0 8px 0; color:{accent};">⌨️ Keyboard Shortcuts</h3>
+                <h3 style="margin:0 0 8px 0; color:{accent};">Keyboard Shortcuts</h3>
                 <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse;">
                     <tr><td style="color:{accent}; width:140px;"><b>Ctrl+C</b></td><td>Copy selected action(s)</td></tr>
                     <tr><td style="color:{accent};"><b>Ctrl+V</b></td><td>Paste after selection</td></tr>
@@ -2405,7 +2472,7 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== TOOL AREAS ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">🧩 Tool Areas</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Tool Areas</h2>
     <table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse; border:1px solid {border};">
         <tr style="background:{bg_medium}; color:{accent};">
             <th align="left" style="border:1px solid {border}; width:160px;">Area</th>
@@ -2421,29 +2488,29 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== ACTION REFERENCE ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">⚙️ Action Reference</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Action Reference</h2>
     <table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse; border:1px solid {border};">
         <tr style="background:{bg_medium}; color:{accent};">
             <th align="left" style="border:1px solid {border}; width:160px;">Action</th>
             <th align="left" style="border:1px solid {border};">Description</th>
             <th align="left" style="border:1px solid {border};">Key settings</th>
         </tr>
-        <tr><td style="border:1px solid {border};"><b>⌨️ Keyboard Key</b></td><td style="border:1px solid {border};">Simulate a key press, hold, or release. Use for skills, UI navigation, hotbars.</td><td style="border:1px solid {border};">key, press_type (press/hold/release), hold_duration (ms)</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🖱️ Mouse Click</b></td><td style="border:1px solid {border};">Left / right / middle click at an absolute or relative screen position.</td><td style="border:1px solid {border};">x, y, button, clicks, relative mode</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🧭 Mouse Move</b></td><td style="border:1px solid {border};">Move cursor smoothly to a position. Combine with a Click action for more natural movement.</td><td style="border:1px solid {border};">x, y, duration (ms), relative mode</td></tr>
-        <tr><td style="border:1px solid {border};"><b>⏱️ Delay</b></td><td style="border:1px solid {border};">Pause for a fixed or randomized duration. Essential between actions for natural pacing.</td><td style="border:1px solid {border};">duration (ms), randomize, min/max range</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🔁 Loop Start / 🔚 Loop End</b></td><td style="border:1px solid {border};">Repeat a block of actions a fixed number of times. Nest loops for complex repetition.</td><td style="border:1px solid {border};">iterations count on Loop Start; no params on Loop End</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🎯 Pixel Check</b></td><td style="border:1px solid {border};">Wait until a specific pixel at x,y matches a target color within tolerance. Good for detecting game state changes.</td><td style="border:1px solid {border};">x, y, color (hex), tolerance (0–255), timeout (ms)</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🖼️ Image Match</b></td><td style="border:1px solid {border};">Find a saved template image on screen using OpenCV. Can click the match or just wait for it to appear.</td><td style="border:1px solid {border};">template_path, confidence (0–1), search region, click_match</td></tr>
-        <tr><td style="border:1px solid {border};"><b>👁️ Region Watcher</b></td><td style="border:1px solid {border};">Continuously sample pixels in a rectangle and trigger when enough match a target color. Useful for health bars, indicators, loot spawns.</td><td style="border:1px solid {border};">x, y, w, h, target_color, tolerance, check_type (appears/disappears)</td></tr>
-        <tr><td style="border:1px solid {border};"><b>⚖️ Conditional Branch</b></td><td style="border:1px solid {border};">IF a condition is true → run THEN actions, otherwise run ELSE actions. Supports pixel, image, window, and region conditions.</td><td style="border:1px solid {border};">condition_type, nested THEN actions list, nested ELSE actions list</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🪟 Window Focus Check</b></td><td style="border:1px solid {border};">Pause or abort execution when a required window title is not in focus. Separate multiple titles with <b>|</b> (pipe).</td><td style="border:1px solid {border};">window_title (supports pipe-separated list), action_on_mismatch</td></tr>
-        <tr><td style="border:1px solid {border};"><b>🔢 Skill Check Digits</b></td><td style="border:1px solid {border};">Read digits from screen with OCR (Tesseract) and press the matching number keys. Built for FiveM / GTA skill check mini-games.</td><td style="border:1px solid {border};">region, max_digits, key_delay (ms), tesseract path</td></tr>
-        <tr><td style="border:1px solid {border};"><b>▶️ Run Profile</b></td><td style="border:1px solid {border};">Run another saved profile from within this one. Good for chaining macros together.</td><td style="border:1px solid {border};">profile_name</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Keyboard Key</b></td><td style="border:1px solid {border};">Simulate a key press, hold, or release. Use for skills, UI navigation, hotbars.</td><td style="border:1px solid {border};">key, press_type (press/hold/release), hold_duration (ms)</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Mouse Click</b></td><td style="border:1px solid {border};">Left / right / middle click at an absolute or relative screen position.</td><td style="border:1px solid {border};">x, y, button, clicks, relative mode</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Mouse Move</b></td><td style="border:1px solid {border};">Move cursor smoothly to a position. Combine with a Click action for more natural movement.</td><td style="border:1px solid {border};">x, y, duration (ms), relative mode</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Delay</b></td><td style="border:1px solid {border};">Pause for a fixed or randomized duration. Essential between actions for natural pacing.</td><td style="border:1px solid {border};">duration (ms), randomize, min/max range</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Loop Start / Loop End</b></td><td style="border:1px solid {border};">Repeat a block of actions a fixed number of times. Nest loops for complex repetition.</td><td style="border:1px solid {border};">iterations count on Loop Start; no params on Loop End</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Pixel Check</b></td><td style="border:1px solid {border};">Wait until a specific pixel at x,y matches a target color within tolerance. Good for detecting game state changes.</td><td style="border:1px solid {border};">x, y, color (hex), tolerance (0-255), timeout (ms)</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Image Match</b></td><td style="border:1px solid {border};">Find a saved template image on screen using OpenCV. Can click the match or just wait for it to appear.</td><td style="border:1px solid {border};">template_path, confidence (0-1), search region, click_match</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Region Watcher</b></td><td style="border:1px solid {border};">Continuously sample pixels in a rectangle and trigger when enough match a target color. Useful for health bars, indicators, loot spawns.</td><td style="border:1px solid {border};">x, y, w, h, target_color, tolerance, check_type (appears/disappears)</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Conditional Branch</b></td><td style="border:1px solid {border};">IF a condition is true → run THEN actions, otherwise run ELSE actions. Supports pixel, image, window, and region conditions.</td><td style="border:1px solid {border};">condition_type, nested THEN actions list, nested ELSE actions list</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Window Focus Check</b></td><td style="border:1px solid {border};">Pause or abort execution when a required window title is not in focus. Separate multiple titles with <b>|</b> (pipe).</td><td style="border:1px solid {border};">window_title (supports pipe-separated list), action_on_mismatch</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Skill Check Digits</b></td><td style="border:1px solid {border};">Read digits from screen with OCR (Tesseract) and press the matching number keys. Built for FiveM / GTA skill check mini-games.</td><td style="border:1px solid {border};">region, max_digits, key_delay (ms), tesseract path</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Run Profile</b></td><td style="border:1px solid {border};">Run another saved profile from within this one. Good for chaining macros together.</td><td style="border:1px solid {border};">profile_name</td></tr>
     </table>
 
     <!-- ===== PROFILES ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">📁 Profiles Explained</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Profiles Explained</h2>
     <table width="100%" cellspacing="8" cellpadding="10" style="border-collapse:separate;">
         <tr>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
@@ -2451,7 +2518,7 @@ class HelpDialog(QDialog):
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
                     <li><b>Name</b> - identifies the profile; shown in lists and hotkey overlays.</li>
                     <li><b>Game</b> - used for grouping; shown as [Game] tag in lists.</li>
-                    <li><b>Hotkey</b> - F1–F12 key that starts/stops this profile globally.</li>
+                    <li><b>Hotkey</b> - F1-F12 key that starts/stops this profile globally.</li>
                     <li><b>Description</b> - notes for yourself; not used during execution.</li>
                     <li><b>Loop modes:</b><br>
                         &nbsp;&nbsp;• <i>Loop Once</i> - run the sequence a single time then stop.<br>
@@ -2463,8 +2530,8 @@ class HelpDialog(QDialog):
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
                 <h3 style="margin:0 0 8px 0; color:{accent};">Import / Export (.sloth)</h3>
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
-                    <li>Use <b>📤 Export .sloth</b> to save a profile as a shareable file.</li>
-                    <li>Use <b>📥 Import .sloth</b> to load a profile from someone else or from backup.</li>
+                    <li>Use <b>Export .sloth</b> to save a profile as a shareable file.</li>
+                    <li>Use <b>Import .sloth</b> to load a profile from someone else or from backup.</li>
                     <li>.sloth files are JSON-based and portable across machines.</li>
                     <li><b>Search bar</b> - live filter profiles by name or game tag.</li>
                     <li><b>Sort</b> - order by Name, Game, Hotkey, or Recently Modified.</li>
@@ -2474,22 +2541,22 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== LOOPS ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">🔁 Using Loops Inside a Sequence</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Using Loops Inside a Sequence</h2>
     <p style="margin:0 0 8px 0; color:{text_primary};">Inline loops let you repeat a block of actions without making a separate profile.</p>
     <table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse; border:1px solid {border};">
         <tr style="background:{bg_medium}; color:{accent};">
             <th align="left" style="border:1px solid {border};">Step</th>
             <th align="left" style="border:1px solid {border};">What to do</th>
         </tr>
-        <tr><td style="border:1px solid {border};">1</td><td style="border:1px solid {border};">Add a <b>🔁 Loop Start</b> action; set <i>iterations</i> (e.g. 5).</td></tr>
+        <tr><td style="border:1px solid {border};">1</td><td style="border:1px solid {border};">Add a <b>Loop Start</b> action; set <i>iterations</i> (e.g. 5).</td></tr>
         <tr><td style="border:1px solid {border};">2</td><td style="border:1px solid {border};">Add the actions you want to repeat between Loop Start and End.</td></tr>
-        <tr><td style="border:1px solid {border};">3</td><td style="border:1px solid {border};">Add a <b>🔚 Loop End</b> action directly after the last repeated action.</td></tr>
+        <tr><td style="border:1px solid {border};">3</td><td style="border:1px solid {border};">Add a <b>Loop End</b> action directly after the last repeated action.</td></tr>
         <tr><td style="border:1px solid {border};">4</td><td style="border:1px solid {border};">Loops can be nested - place a second Loop Start/End block inside the first.</td></tr>
-        <tr><td style="border:1px solid {border};">⚠️ Note</td><td style="border:1px solid {border};">Always pair every Loop Start with a Loop End or execution will run to end-of-sequence.</td></tr>
+        <tr><td style="border:1px solid {border};">Note</td><td style="border:1px solid {border};">Always pair every Loop Start with a Loop End or execution will run to end-of-sequence.</td></tr>
     </table>
 
     <!-- ===== CONDITIONAL BRANCH ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">⚖️ Conditional Branching Deep-Dive</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Conditional Branching Deep-Dive</h2>
     <table width="100%" cellspacing="8" cellpadding="10" style="border-collapse:separate;">
         <tr>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
@@ -2518,15 +2585,15 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== REGION WATCHER ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">👁️ Region Watcher &amp; Image Match Tips</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Region Watcher &amp; Image Match Tips</h2>
     <table width="100%" cellspacing="8" cellpadding="10" style="border-collapse:separate;">
         <tr>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
                 <h3 style="margin:0 0 8px 0; color:{accent};">Region Watcher</h3>
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
-                    <li>Use the <b>👁 Pick Region</b> button to draw the watch area on screen.</li>
+                    <li>Use the <b>Pick Region</b> button to draw the watch area on screen.</li>
                     <li>Set <b>target_color</b> to the hex color you want to detect (use Pick Color).</li>
-                    <li>Increase <b>tolerance</b> (5–30) if the color shifts slightly during gameplay.</li>
+                    <li>Increase <b>tolerance</b> (5-30) if the color shifts slightly during gameplay.</li>
                     <li><b>appears</b> - triggers when the color shows up in the region.</li>
                     <li><b>disappears</b> - triggers when the color leaves the region.</li>
                     <li>Threshold is 2% of total region pixels - small regions need bright, distinct colors.</li>
@@ -2536,7 +2603,7 @@ class HelpDialog(QDialog):
                 <h3 style="margin:0 0 8px 0; color:{accent};">Image Match</h3>
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
                     <li>Capture a clean, small template image of the UI element (no background clutter).</li>
-                    <li><b>Confidence 0.8–0.9</b> is usually ideal. Lower = more false positives. Higher = misses.</li>
+                    <li><b>Confidence 0.8-0.9</b> is usually ideal. Lower = more false positives. Higher = misses.</li>
                     <li>Restrict the <b>search region</b> to the area of the screen where the element appears.</li>
                     <li>If OpenCV (cv2) is not installed, Image Match will log an error and skip.</li>
                     <li>Template images are stored relative to the Sloth folder; use short, descriptive filenames.</li>
@@ -2546,28 +2613,28 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== RECORDING ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">⏺️ Recording</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Recording</h2>
     <p style="margin:0 0 8px 0; color:{text_primary};">The recording panel (bottom of Macro Editor) captures live mouse clicks and key presses.</p>
     <table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse; border:1px solid {border};">
         <tr style="background:{bg_medium}; color:{accent};">
             <th align="left" style="border:1px solid {border};">Step</th>
             <th align="left" style="border:1px solid {border};">Details</th>
         </tr>
-        <tr><td style="border:1px solid {border};">1. Start Recording</td><td style="border:1px solid {border};">Click <b>⏺ Start Recording</b>. Sloth captures all mouse clicks and key presses in the background.</td></tr>
+        <tr><td style="border:1px solid {border};">1. Start Recording</td><td style="border:1px solid {border};">Click <b>🔴 Start Recording</b>. Sloth captures all mouse clicks and key presses in the background.</td></tr>
         <tr><td style="border:1px solid {border};">2. Perform Actions</td><td style="border:1px solid {border};">Switch to your game/app and perform the sequence you want to automate. Timing is captured.</td></tr>
-        <tr><td style="border:1px solid {border};">3. Stop &amp; Import</td><td style="border:1px solid {border};">Click <b>⏹ Stop</b>, then <b>📥 Import to Sequence</b> to append recorded actions. Review and clean up.</td></tr>
+        <tr><td style="border:1px solid {border};">3. Stop &amp; Import</td><td style="border:1px solid {border};">Click <b>Stop</b>, then <b>Import to Sequence</b> to append recorded actions. Review and clean up.</td></tr>
         <tr><td style="border:1px solid {border};">Tip</td><td style="border:1px solid {border};">Recorded delays include exact timing. Enable <b>Humanized Timings</b> to add natural variation after import.</td></tr>
     </table>
 
     <!-- ===== SAFETY & AFK ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">🛡️ Safety Features &amp; AFK Detection</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Safety Features &amp; AFK Detection</h2>
     <table width="100%" cellspacing="8" cellpadding="10" style="border-collapse:separate;">
         <tr>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
                 <h3 style="margin:0 0 8px 0; color:{accent};">Safety Timeout</h3>
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
                     <li>Auto-stops any running macro if it runs longer than a configured duration.</li>
-                    <li>Configure in <b>Settings → Safety</b>.</li>
+                    <li>Configure in <b>Settings ⚙️ Safety</b>.</li>
                     <li>Prevents unattended macros running indefinitely if something goes wrong.</li>
                 </ul>
             </td>
@@ -2576,7 +2643,7 @@ class HelpDialog(QDialog):
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
                     <li>Monitors screen brightness changes to detect if the game has gone to a login/AFK screen.</li>
                     <li>When triggered, stops or pauses the macro.</li>
-                    <li>Enable and tune sensitivity in <b>Settings → AFK</b>.</li>
+                    <li>Enable and tune sensitivity in <b>Settings ⚙️ AFK</b>.</li>
                     <li>Combine with a <b>Window Focus Check</b> action for an extra layer of safety.</li>
                 </ul>
             </td>
@@ -2584,7 +2651,7 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== BACKUP ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">💾 Backup &amp; Restore</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Backup &amp; Restore</h2>
     <p style="margin:0 0 8px 0; color:{text_primary};">Sloth auto-saves a backup of all profiles every <b>6 hours</b>. You can also trigger a manual backup at any time.</p>
     <table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse; border:1px solid {border};">
         <tr style="background:{bg_medium}; color:{accent};">
@@ -2592,13 +2659,13 @@ class HelpDialog(QDialog):
             <th align="left" style="border:1px solid {border};">Details</th>
         </tr>
         <tr><td style="border:1px solid {border};">Auto-backup</td><td style="border:1px solid {border};">Runs every 6 hours while Sloth is open. Stored in <b>./backups/</b> with timestamps.</td></tr>
-        <tr><td style="border:1px solid {border};">Manual backup</td><td style="border:1px solid {border};">Use <b>Settings → Backup Now</b> to create a snapshot at any time.</td></tr>
+        <tr><td style="border:1px solid {border};">Manual backup</td><td style="border:1px solid {border};">Use <b>Settings 💾 Backup Now</b> to create a snapshot at any time.</td></tr>
         <tr><td style="border:1px solid {border};">Restore</td><td style="border:1px solid {border};">Open the Backup Manager page and click any backup entry to restore it.</td></tr>
         <tr><td style="border:1px solid {border};">Max backups kept</td><td style="border:1px solid {border};">The 10 most recent backups are kept. Older ones are automatically pruned.</td></tr>
     </table>
 
     <!-- ===== OCR + TESSERACT ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">🔠 OCR / Tesseract Setup</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">OCR / Tesseract Setup</h2>
     <table width="100%" cellspacing="8" cellpadding="10" style="border-collapse:separate;">
         <tr>
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
@@ -2607,8 +2674,8 @@ class HelpDialog(QDialog):
                     <li>Tesseract OCR is <b>not bundled</b> with Sloth - install it separately.</li>
                     <li>Download from: <b>https://github.com/tesseract-ocr/tesseract</b></li>
                     <li>Place <b>tesseract.exe</b> in one of these paths next to Sloth:</li>
-                    <li style="list-style:none; margin-left:8px; color:{text_secondary};">• <code>./tesseract/tesseract.exe</code></li>
-                    <li style="list-style:none; margin-left:8px; color:{text_secondary};">• <code>./teseract/tesseract.exe</code></li>
+                    <li style="list-style:none; margin-left:8px; color:{text_secondary};"> • <code>./tesseract/tesseract.exe</code></li>
+                    <li style="list-style:none; margin-left:8px; color:{text_secondary};"> • <code>./teseract/tesseract.exe</code></li>
                     <li>Skill Check Digits will log an error if the path is wrong.</li>
                 </ul>
             </td>
@@ -2626,24 +2693,24 @@ class HelpDialog(QDialog):
     </table>
 
     <!-- ===== TROUBLESHOOTING ===== -->
-    <h2 style="margin:14px 0 6px 0; color:{accent};">🛠️ Troubleshooting</h2>
+    <h2 style="margin:14px 0 6px 0; color:{accent};">Troubleshooting</h2>
     <table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse; border:1px solid {border};">
         <tr style="background:{bg_medium}; color:{accent};">
             <th align="left" style="border:1px solid {border}; width:220px;">Issue</th>
             <th align="left" style="border:1px solid {border};">Solutions</th>
         </tr>
         <tr><td style="border:1px solid {border};">Macro does not start</td><td style="border:1px solid {border};">Check the profile has at least one enabled action, the hotkey is set and not conflicting, and no other macro is running.</td></tr>
-        <tr><td style="border:1px solid {border};">Clicks / moves miss target</td><td style="border:1px solid {border};">Re-pick coordinates using the 👁 Pick button. Disable <i>relative mode</i> unless you specifically need cursor-relative offsets. Add a short Delay before the click.</td></tr>
-        <tr><td style="border:1px solid {border};">Image match unreliable</td><td style="border:1px solid {border};">Recapture the template image with no UI clutter. Narrow the search region. Try confidence 0.75–0.85. Make sure OpenCV (cv2) is installed.</td></tr>
-        <tr><td style="border:1px solid {border};">Region watcher not triggering</td><td style="border:1px solid {border};">Re-pick region, re-pick target color exactly. Increase tolerance by 5–10 at a time. Ensure the region doesn't include UI chrome (health bar border etc.).</td></tr>
+        <tr><td style="border:1px solid {border};">Clicks / moves miss target</td><td style="border:1px solid {border};">Re-pick coordinates using the Pick button. Disable <i>relative mode</i> unless you specifically need cursor-relative offsets. Add a short Delay before the click.</td></tr>
+        <tr><td style="border:1px solid {border};">Image match unreliable</td><td style="border:1px solid {border};">Recapture the template image with no UI clutter. Narrow the search region. Try confidence 0.75-0.85. Make sure OpenCV (cv2) is installed.</td></tr>
+        <tr><td style="border:1px solid {border};">Region watcher not triggering</td><td style="border:1px solid {border};">Re-pick region, re-pick target color exactly. Increase tolerance by 5-10 at a time. Ensure the region doesn't include UI chrome (health bar border etc.).</td></tr>
         <tr><td style="border:1px solid {border};">Conditional branch always takes same path</td><td style="border:1px solid {border};">Temporarily set condition to <i>Always True</i> or <i>Always False</i> to confirm both paths are correct. Then set real condition and re-test.</td></tr>
         <tr><td style="border:1px solid {border};">OCR finds no digits</td><td style="border:1px solid {border};">Confirm tesseract.exe path. Tighten the OCR region to digits only. Add contrast in game settings if digits are dim.</td></tr>
-        <tr><td style="border:1px solid {border};">Profile changes not persisting</td><td style="border:1px solid {border};">Changes auto-save after a 350 ms delay. If unsure, click 💾 Save Profile manually. Reload from list to verify.</td></tr>
+        <tr><td style="border:1px solid {border};">Profile changes not persisting</td><td style="border:1px solid {border};">Changes auto-save after a 350 ms delay. If unsure, click Save Profile manually. Reload from list to verify.</td></tr>
         <tr><td style="border:1px solid {border};">Hotkey not triggering</td><td style="border:1px solid {border};">Ensure Sloth is running and the profile is loaded/selected. Check Settings for conflicts. Some games block global hotkeys - run Sloth as Administrator.</td></tr>
         <tr><td style="border:1px solid {border};">Overlay covers other dialogs</td><td style="border:1px solid {border};">Coordinate/region pickers auto-hide sibling dialogs while active and restore them after picking.</td></tr>
     </table>
 
-    <p style="margin-top:14px; color:{text_secondary}; font-size:11px;"><b>Support &amp; Community:</b> <a href="https://orvlyn.me" style="color:{accent};">orvlyn.me</a> · Discord: <b>Orvlyn</b> · X/Twitter: <b>@Orvlyn</b></p>
+    <p style="margin-top:14px; color:{text_secondary}; font-size:11px;"><b>Support &amp; Community:</b> <a href="https://orvlyn.me" style="color:{accent};">orvlyn.me</a> • Discord: <b>Orvlyn</b> • X/Twitter: <b>@Orvlyn</b></p>
 </div>
 """)
         
@@ -2747,7 +2814,7 @@ class MousePositionTracker(QLabel):
         self.timer.stop()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 class CustomThemeDialog(QDialog):
     """Color-picker dialog for the Custom theme."""
 
@@ -2755,17 +2822,17 @@ class CustomThemeDialog(QDialog):
 
     # (settings key, display label, tooltip)
     _FIELDS = [
-        ('accent',          '🎨 Accent',           'Primary highlight - buttons, focused borders, sliders'),
-        ('accent_text',     '📝 Accent Text',       'Text drawn on top of the accent color'),
-        ('bg_dark',         '🌑 Background Dark',   'Darkest surface (window / sidebar fill)'),
-        ('bg_medium',       '🌒 Background Medium', 'Card / panel surface, slightly lighter'),
-        ('border',          '📐 Border',            'Widget outline and divider lines'),
-        ('hover',           '✦ Hover',              'Button / row background when hovered'),
-        ('scrollbar',       '📜 Scrollbar',         'Scrollbar track background color'),
-        ('scrollbar_hover', '🔺 Scrollbar Hover',   'Scrollbar thumb color on mouse-over'),
-        ('text_primary',    '📄 Text Primary',      'Main readable body text'),
-        ('text_secondary',  '📋 Text Secondary',    'Labels, hints, and secondary text'),
-        ('text_disabled',   '🔇 Text Disabled',     'Grayed-out inactive controls'),
+        ('accent',          'Accent',           'Primary highlight - buttons, focused borders, sliders'),
+        ('accent_text',     'Accent Text',       'Text drawn on top of the accent color'),
+        ('bg_dark',         'Background Dark',   'Darkest surface (window / sidebar fill)'),
+        ('bg_medium',       'Background Medium', 'Card / panel surface, slightly lighter'),
+        ('border',          'Border',            'Widget outline and divider lines'),
+        ('hover',           '🎨 Hover',              'Button / row background when hovered'),
+        ('scrollbar',       'Scrollbar',         'Scrollbar track background color'),
+        ('scrollbar_hover', 'Scrollbar Hover',   'Scrollbar thumb color on mouse-over'),
+        ('text_primary',    'Text Primary',      'Main readable body text'),
+        ('text_secondary',  'Text Secondary',    'Labels, hints, and secondary text'),
+        ('text_disabled',   'Text Disabled',     'Grayed-out inactive controls'),
     ]
 
     def __init__(self, current_colors: dict, parent=None):
@@ -2778,7 +2845,7 @@ class CustomThemeDialog(QDialog):
         self._build_ui()
         QTimer.singleShot(0, lambda: apply_dark_title_bar(self))
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    # -- Layout ----------------------------------------------------------------
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -2793,7 +2860,7 @@ class CustomThemeDialog(QDialog):
         sub.setWordWrap(True)
         outer.addWidget(sub)
 
-        # ── Body: color editor (left) + live preview (right) ─────────────────
+        # -- Body: color editor (left) + live preview (right) -----------------
         body_row = QHBoxLayout()
         body_row.setSpacing(16)
 
@@ -2867,7 +2934,7 @@ class CustomThemeDialog(QDialog):
 
         body_row.addWidget(left_widget, 3)
 
-        # ── Live preview panel ────────────────────────────────────────────────
+        # -- Live preview panel ------------------------------------------------
         self._preview_label = QLabel()
         self._preview_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self._preview_label.setWordWrap(True)
@@ -2878,12 +2945,12 @@ class CustomThemeDialog(QDialog):
         outer.addLayout(body_row, 1)
         self._update_preview()  # initial render
 
-        # ── OK / Cancel ───────────────────────────────────────────────────────
+        # -- OK / Cancel -------------------------------------------------------
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
-        save_btn = QPushButton("✅  Save Theme")
+        save_btn = QPushButton("💾 Save Theme")
         save_btn.setDefault(True)
         save_btn.setStyleSheet("font-weight: bold;")
         save_btn.clicked.connect(self._save)
@@ -2891,7 +2958,7 @@ class CustomThemeDialog(QDialog):
         btn_row.addWidget(save_btn)
         outer.addLayout(btn_row)
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # -- Helpers ---------------------------------------------------------------
 
     def _update_preview(self):
         """Render a realistic HTML mockup of the Sloth UI using current colors."""
@@ -2958,7 +3025,7 @@ class CustomThemeDialog(QDialog):
                 f" color:{alpha}; font-size:10px;'>{detail}</td>"
                 f"<td style='border-bottom:1px solid {brd}; padding:3px 6px;"
                 f" font-size:10px; text-align:center;"
-                f" color:{'#55DD77' if enabled else td};'>{'✔' if enabled else '✖'}</td>"
+                f" color:{'#55DD77' if enabled else td};'>{'✓' if enabled else '✗'}</td>"
                 f"</tr>"
             )
 
@@ -3215,7 +3282,7 @@ class FloatingMacroToolbar(QDialog):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    # -- Layout ----------------------------------------------------------------
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -3230,7 +3297,7 @@ class FloatingMacroToolbar(QDialog):
         hrow.setContentsMargins(12, 0, 8, 0)
         hrow.setSpacing(8)
 
-        self.status_dot = QLabel("●")
+        self.status_dot = QLabel("🟢")
         self.status_dot.setObjectName("TBDot")
         hrow.addWidget(self.status_dot)
 
@@ -3306,27 +3373,27 @@ class FloatingMacroToolbar(QDialog):
         row4 = QHBoxLayout()
         row4.setSpacing(5)
 
-        self.pause_btn = QPushButton("⏸ Pause")
+        self.pause_btn = QPushButton("⏸️ Pause")
         self.pause_btn.setFixedHeight(26)
         self.pause_btn.setToolTip("Pause macro")
         self.pause_btn.clicked.connect(self.toggle_pause)
         self.pause_btn.setEnabled(False)
         row4.addWidget(self.pause_btn)
 
-        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn = QPushButton("⏹️ Stop")
         self.stop_btn.setFixedHeight(26)
         self.stop_btn.setToolTip("Stop macro")
         self.stop_btn.clicked.connect(self.stop_macro)
         self.stop_btn.setEnabled(False)
         row4.addWidget(self.stop_btn)
 
-        self.purge_btn = QPushButton("🧹")
+        self.purge_btn = QPushButton("🗑️")
         self.purge_btn.setFixedSize(32, 26)
         self.purge_btn.setToolTip("Purge: kill all Sloth processes immediately")
         self.purge_btn.clicked.connect(self._purge_from_toolbar)
         row4.addWidget(self.purge_btn)
 
-        self.edit_btn = QPushButton("✏ Edit")
+        self.edit_btn = QPushButton("✏️ Edit")
         self.edit_btn.setFixedHeight(26)
         self.edit_btn.setToolTip("Open macro in editor")
         self.edit_btn.clicked.connect(self._open_editor)
@@ -3334,7 +3401,7 @@ class FloatingMacroToolbar(QDialog):
 
         row4.addStretch()
 
-        opacity_lbl = QLabel("👁")
+        opacity_lbl = QLabel("🔆")
         opacity_lbl.setToolTip("Toolbar opacity")
         row4.addWidget(opacity_lbl)
 
@@ -3349,7 +3416,7 @@ class FloatingMacroToolbar(QDialog):
         blayout.addLayout(row4)
         root.addWidget(body)
 
-    # ── Styling ───────────────────────────────────────────────────────────────
+    # -- Styling ---------------------------------------------------------------
 
     def _apply_styles(self):
         a   = self._accent
@@ -3431,7 +3498,7 @@ class FloatingMacroToolbar(QDialog):
         super().showEvent(event)
         self._apply_styles()
 
-    # ── Profile info ──────────────────────────────────────────────────────────
+    # -- Profile info ----------------------------------------------------------
 
     def set_profile_info(self, profile_name="", hotkey=""):
         """Update displayed profile and hotkey information."""
@@ -3448,7 +3515,7 @@ class FloatingMacroToolbar(QDialog):
             self.profile_chip.setText("No profile loaded")
             self.hotkey_chip.setVisible(False)
 
-    # ── Execution state ───────────────────────────────────────────────────────
+    # -- Execution state -------------------------------------------------------
 
     def start_execution(self, macro_name=""):
         """Called when macro execution starts."""
@@ -3473,14 +3540,14 @@ class FloatingMacroToolbar(QDialog):
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
         self.is_paused = False
-        self.pause_btn.setText("⏸ Pause")
+        self.pause_btn.setText("⏸️ Pause")
         self.timer.stop()
         self.execution_stopped.emit()
 
     def toggle_pause(self):
         """Toggle pause state."""
         self.is_paused = not self.is_paused
-        self.pause_btn.setText("⏵ Resume" if self.is_paused else "⏸ Pause")
+        self.pause_btn.setText("▶️ Resume" if self.is_paused else "⏸️ Pause")
         if self.is_paused:
             self.status_dot.setStyleSheet("font-size: 10px; color: #FFAA00;")
             self.status_label.setText("Paused")
@@ -3509,7 +3576,7 @@ class FloatingMacroToolbar(QDialog):
         self.progress_bar.setValue(max(0, min(100, int(progress))))
         self.detail_label.setText(status)
 
-    # ── Navigation ────────────────────────────────────────────────────────────
+    # -- Navigation ------------------------------------------------------------
 
     def _purge_from_toolbar(self):
         """Delegate purge to main window."""
@@ -3525,7 +3592,7 @@ class FloatingMacroToolbar(QDialog):
             self._main_window.raise_()
             self._main_window.activateWindow()
 
-    # ── Window flags ──────────────────────────────────────────────────────────
+    # -- Window flags ----------------------------------------------------------
 
     def set_always_on_top(self, on_top):
         """Toggle always-on-top flag."""
@@ -3537,7 +3604,7 @@ class FloatingMacroToolbar(QDialog):
         self.setWindowFlags(flags)
         self.show()
 
-    # ── Drag to move ──────────────────────────────────────────────────────────
+    # -- Drag to move ----------------------------------------------------------
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -3637,19 +3704,19 @@ class HomePage(CardPage):
         quick_layout = QHBoxLayout(quick_actions)
         quick_layout.setSpacing(15)
         
-        new_macro_btn = QPushButton("📝 Create New Macro")
+        new_macro_btn = QPushButton("Create New Macro")
         new_macro_btn.setMinimumHeight(55)
         new_macro_btn.setStyleSheet(f"font-size: 13px; font-weight: bold; background: {theme['hover']}; border: 2px solid {theme['accent']};")
         new_macro_btn.clicked.connect(self._navigate_to_profiles)
         quick_layout.addWidget(new_macro_btn)
         
-        examples_btn = QPushButton("📚 View Examples")
+        examples_btn = QPushButton("View Examples")
         examples_btn.setMinimumHeight(55)
         examples_btn.setStyleSheet(f"font-size: 13px; font-weight: bold; background: {theme['hover']}; border: 2px solid {theme['accent']};")
         examples_btn.clicked.connect(self._navigate_to_editor)
         quick_layout.addWidget(examples_btn)
         
-        settings_btn = QPushButton("⚙️ Settings")
+        settings_btn = QPushButton("Settings")
         settings_btn.setMinimumHeight(55)
         settings_btn.setStyleSheet(f"font-size: 13px; font-weight: bold; background: {theme['hover']}; border: 2px solid {theme['accent']};")
         settings_btn.clicked.connect(self._navigate_to_settings)
@@ -3658,15 +3725,15 @@ class HomePage(CardPage):
         self.card_layout.addWidget(quick_actions)
         
         # Getting Started
-        guide = QGroupBox("🚀 Getting Started (60 seconds)")
+        guide = QGroupBox("Getting Started (60 seconds)")
         guide_layout = QVBoxLayout(guide)
         
         steps = [
-            ("1️⃣", "Create Profile", "Profile Manager → Click ➕ New"),
-            ("2️⃣", "Build Actions", "Add keyboard, mouse and delay actions from the editor"),
-            ("3️⃣", "Set Hotkey", "Assign F1-F12 to trigger your macro"),
-            ("4️⃣", "Test & Tweak", "Use ▶️ Test Run to verify it works"),
-            ("5️⃣", "Go Live", "Press your hotkey in-game!"),
+            ("1", "Create Profile", "Profile Manager → Click New"),
+            ("2", "Build Actions", "Add keyboard, mouse and delay actions from the editor"),
+            ("3", "Set Hotkey", "Assign F1-F12 to trigger your macro"),
+            ("4", "Test & Tweak", "Use Test Run to verify it works"),
+            ("5", "Go Live", "Press your hotkey in-game!"),
         ]
         
         for emoji, title_text, desc in steps:
@@ -3701,7 +3768,7 @@ class HomePage(CardPage):
         self.card_layout.addWidget(guide)
         
         # Key Features (3 columns)
-        features = QGroupBox("✨ Key Features")
+        features = QGroupBox("Key Features")
         features_layout = QGridLayout(features)
         features_layout.setSpacing(15)
         
@@ -3709,9 +3776,9 @@ class HomePage(CardPage):
             ("⌨️", "Keyboard Control", "Press, hold, and release keys with custom timing"),
             ("🖱️", "Mouse Precision", "Click, move, and drag with pixel-perfect accuracy"),
             ("⏱️", "Smart Delays", "Randomized waits so timing never looks the same"),
-            ("🔁", "Smart Loops", "Count-based, infinite, or time-based repetition"),
-            ("🎯", "Region Watch", "Monitor screen areas for color changes"),
-            ("🪟", "Safety Checks", "Focus detection, AFK protection, and more"),
+            ("🔄", "Smart Loops", "Count-based, infinite, or time-based repetition"),
+            ("👁️", "Region Watch", "Monitor screen areas for color changes"),
+            ("✅", "Safety Checks", "Focus detection, AFK protection, and more"),
         ]
         
         for i, (icon, feature_title, feature_desc) in enumerate(feature_list):
@@ -3748,7 +3815,7 @@ class HomePage(CardPage):
         self._pending_update = (version, url)
         theme = self._get_theme_colors()
         self._update_banner.setText(
-            f"🔔  Sloth {version} is available - click here to download!"
+            f"🎉 Sloth {version} is available - click here to download!"
         )
         self._update_banner.setStyleSheet(
             f"background: {theme['accent']}; color: #ffffff; font-size: 13px; "
@@ -3854,7 +3921,7 @@ class ProfileManagerPage(CardPage):
         self.clone_btn = QPushButton("Clone")
         self.clone_btn.setToolTip("Duplicate selected profile under a new name")
         self.delete_btn = QPushButton("🗑️ Delete")
-        self.deselect_btn = QPushButton("❌ Deselect")
+        self.deselect_btn = QPushButton("⭕ Deselect")
         self.refresh_btn = QPushButton("🔄 Refresh")
         btn_row.addWidget(self.new_btn)
         btn_row.addWidget(self.clone_btn)
@@ -3864,8 +3931,8 @@ class ProfileManagerPage(CardPage):
         left_layout.addLayout(btn_row)
 
         share_row = QHBoxLayout()
-        self.import_sloth_btn = QPushButton("📥 Import .sloth")
-        self.export_sloth_btn = QPushButton("📤 Export .sloth")
+        self.import_sloth_btn = QPushButton("📎 Import .sloth")
+        self.export_sloth_btn = QPushButton("💾 Export .sloth")
         share_row.addWidget(self.import_sloth_btn)
         share_row.addWidget(self.export_sloth_btn)
         left_layout.addLayout(share_row)
@@ -3929,7 +3996,7 @@ class ProfileManagerPage(CardPage):
         # Bottom-right purge button (small, unobtrusive)
         bottom_row = QHBoxLayout()
         bottom_row.addStretch()
-        self.purge_btn = QPushButton("🧹 Purge")
+        self.purge_btn = QPushButton("🗑️ Purge")
         self.purge_btn.setMaximumWidth(100)
         self.purge_btn.setMaximumHeight(24)
         self.purge_btn.setStyleSheet("font-size: 9px; padding: 2px 6px;")
@@ -3964,10 +4031,10 @@ class ProfileManagerPage(CardPage):
                     continue
 
             starters = [
-                ("Starter Mining", "OSRS", "F2", "Simple OSRS mining starter", "🪨 OSRS: Copper Mining"),
-                ("Starter FiveM Interact", "FiveM", "F3", "Basic FiveM interaction loop", "💼 FiveM: Click Interaction"),
-                ("Starter Minecraft Fish", "Minecraft", "F4", "AFK fishing starter template", "🎣 Minecraft: AFK Fishing"),
-                ("Starter WoW DPS", "WoW", "F5", "Simple MMO rotation starter", "⚔️ WoW: Melee DPS Rotation"),
+                ("Starter Mining", "OSRS", "F2", "Simple OSRS mining starter", "OSRS: Copper Mining"),
+                ("Starter FiveM Interact", "FiveM", "F3", "Basic FiveM interaction loop", "FiveM: Click Interaction"),
+                ("Starter Minecraft Fish", "Minecraft", "F4", "AFK fishing starter template", "Minecraft: AFK Fishing"),
+                ("Starter WoW DPS", "WoW", "F5", "Simple MMO rotation starter", "WoW: Melee DPS Rotation"),
             ]
 
             for name, game, hotkey, description, template_name in starters:
@@ -4270,8 +4337,8 @@ class MacroEditorPage(CardPage):
         self._drag_start_pos = QPoint()
 
         action_btn_row = QHBoxLayout()
-        self.move_up_btn = QPushButton("⬆️")
-        self.move_down_btn = QPushButton("⬇️")
+        self.move_up_btn = QPushButton("↑")
+        self.move_down_btn = QPushButton("↓")
         self.delete_action_btn = QPushButton("🗑️ Delete")
         self.clear_all_btn = QPushButton("Clear All")
         action_btn_row.addWidget(self.move_up_btn)
@@ -4280,7 +4347,7 @@ class MacroEditorPage(CardPage):
         action_btn_row.addWidget(self.clear_all_btn)
         left_layout.addLayout(action_btn_row)
 
-        exec_status_group = QGroupBox("⚡ Execution Status")
+        exec_status_group = QGroupBox("📊 Execution Status")
         exec_status_layout = QVBoxLayout(exec_status_group)
         exec_status_layout.setContentsMargins(8, 8, 8, 8)
         exec_status_layout.setSpacing(4)
@@ -4297,7 +4364,7 @@ class MacroEditorPage(CardPage):
 
         # Execution log toggle
         log_toggle_row = QHBoxLayout()
-        self._exec_log_toggle_btn = QPushButton("▼ Show Log")
+        self._exec_log_toggle_btn = QPushButton("📜 Show Log")
         self._exec_log_toggle_btn.setCheckable(True)
         self._exec_log_toggle_btn.setFixedHeight(20)
         self._exec_log_toggle_btn.setStyleSheet("font-size: 10px; padding: 0 4px;")
@@ -4344,13 +4411,13 @@ class MacroEditorPage(CardPage):
         top_control_layout.setSpacing(8)
         
         exec_btn_row = QHBoxLayout()
-        self.test_btn = QPushButton("▶️ Test Run")
+        self.test_btn = QPushButton("▶ Test Run")
         self.test_btn.setMinimumHeight(36)
         self.test_btn.setStyleSheet("font-weight: bold; font-size: 11px;")
-        self.debug_btn = QPushButton("🪲 Debug")
+        self.debug_btn = QPushButton("🔍 Debug")
         self.debug_btn.setMinimumHeight(36)
         self.debug_btn.setStyleSheet("font-size: 11px;")
-        self.stop_btn = QPushButton("⏹️ Stop")
+        self.stop_btn = QPushButton("⏹ Stop")
         self.stop_btn.setEnabled(False)
         self.stop_btn.setMinimumHeight(36)
         self.stop_btn.setStyleSheet("font-size: 11px;")
@@ -4359,7 +4426,7 @@ class MacroEditorPage(CardPage):
         exec_btn_row.addWidget(self.stop_btn)
         top_control_layout.addLayout(exec_btn_row)
         
-        self.force_humanized_check = QCheckBox("✨ Global Humanized Timings")
+        self.force_humanized_check = QCheckBox("🎲 Global Humanized Timings")
         self.force_humanized_check.setChecked(True)
         self.force_humanized_check.setToolTip("ON = delays get randomized so timing isn't robotic\nOFF = use exact millisecond timings")
         self.force_humanized_check.setStyleSheet("font-size: 10px; padding: 4px;")
@@ -4390,9 +4457,9 @@ class MacroEditorPage(CardPage):
         self.action_type_combo.setMinimumHeight(38)
         self.action_type_combo.setStyleSheet("font-size: 11px;")
         self.action_type_combo.addItems([
-            "⌨️ Keyboard Key", "🖱️ Mouse Click", "🧭 Mouse Move", "⏱️ Delay",
-            "🔁 Loop Start", "🔚 Loop End", "🎯 Pixel Check", "🖼️ Image Match",
-            "👁️ Region Watcher", "🔢 Skill Check Digits", "🪟 Window Focus Check", "⚖️ Conditional Branch"
+            "Keyboard Key", "Mouse Click", "Mouse Move", "Delay",
+            "Loop Start", "Loop End", "Pixel Check", "Image Match",
+            "Region Watcher", "Skill Check Digits", "Window Focus Check", "Conditional Branch"
         ])
         self.action_type_combo.currentTextChanged.connect(self.update_action_form)
         add_action_content_layout.addWidget(self.action_type_combo)
@@ -4422,7 +4489,7 @@ class MacroEditorPage(CardPage):
         center_scroll_layout.addWidget(add_action_collapsible)
 
         # ===== Templates Section =====
-        templates_collapsible = CollapsibleGroupBox("📋 Templates by Game")
+        templates_collapsible = CollapsibleGroupBox("Templates by Game")
         templates_layout = QVBoxLayout()
         templates_layout.setContentsMargins(0, 0, 0, 0)
         templates_scroll = NoWheelScrollArea()
@@ -4449,7 +4516,7 @@ class MacroEditorPage(CardPage):
 
         for game_category in sorted(games.keys()):
             game_templates = games[game_category]
-            header_btn = QPushButton(f"▸ {game_category} ({len(game_templates)})")
+            header_btn = QPushButton(f"🎮 {game_category} ({len(game_templates)})")
             header_btn.setObjectName("TemplateCategoryBtn")
             header_btn.setCheckable(True)
             header_btn.setChecked(False)
@@ -4509,11 +4576,11 @@ class MacroEditorPage(CardPage):
             def toggle_game_section(checked, container=game_grid_container, btn=header_btn):
                 container.setVisible(checked)
                 label = btn.text()
-                if label.startswith("▸") or label.startswith("▾"):
+                if label.startswith("✓") or label.startswith("✗"):
                     base = label[2:]
                 else:
                     base = label
-                btn.setText(("▾ " if checked else "▸ ") + base)
+                btn.setText(("✓ " if checked else "✗ ") + base)
             header_btn.toggled.connect(toggle_game_section)
             templates_container_layout.addWidget(game_grid_container)
 
@@ -4538,7 +4605,7 @@ class MacroEditorPage(CardPage):
         right_layout.addWidget(self.action_preview_label)
 
         # ===== PINNED: Add Action button - always visible, no scrolling needed =====
-        self.add_action_btn = QPushButton("➕  Add Action to Sequence")
+        self.add_action_btn = QPushButton("➕ Add Action to Sequence")
         self.add_action_btn.setMinimumHeight(46)
         self.add_action_btn.setObjectName("AddActionBtn")
         self.add_action_btn.setToolTip("Add the configured action below to the sequence  (Ctrl+Enter)")
@@ -4546,17 +4613,17 @@ class MacroEditorPage(CardPage):
         right_layout.addWidget(self.add_action_btn)
 
         # Recording controls (pinned at bottom)
-        record_collapsible = CollapsibleGroupBox("⏺️ Recording Controls")
+        record_collapsible = CollapsibleGroupBox("Recording Controls")
         record_content_layout = QVBoxLayout()
         record_content_layout.setContentsMargins(10, 10, 10, 10)
         record_content_layout.setSpacing(8)
         
         record_btn_row = QHBoxLayout()
         record_btn_row.setSpacing(6)
-        self.record_btn = QPushButton("▶️ Start Recording")
+        self.record_btn = QPushButton("⏺ Start Recording")
         self.record_btn.setMinimumHeight(36)
         self.record_btn.setStyleSheet("font-weight: bold; font-size: 11px;")
-        self.stop_record_btn = QPushButton("⏹️ Stop")
+        self.stop_record_btn = QPushButton("⏹ Stop")
         self.stop_record_btn.setEnabled(False)
         self.stop_record_btn.setMinimumHeight(36)
         self.stop_record_btn.setStyleSheet("font-size: 11px;")
@@ -4593,7 +4660,7 @@ class MacroEditorPage(CardPage):
         # Bottom-right purge button (small, unobtrusive)
         bottom_row = QHBoxLayout()
         bottom_row.addStretch()
-        self.purge_btn = QPushButton("🧹 Purge")
+        self.purge_btn = QPushButton("🗑️ Purge")
         self.purge_btn.setMaximumWidth(100)
         self.purge_btn.setMaximumHeight(24)
         self.purge_btn.setStyleSheet("font-size: 9px; padding: 2px 6px;")
@@ -4662,29 +4729,29 @@ class MacroEditorPage(CardPage):
     def _template_summary(self, template_name: str) -> str:
         """Readable one-line template description for button labels."""
         summaries = {
-            "🪨 OSRS: Copper Mining": "re-click ore when depleted",
-            "⛏️ OSRS: AFK Fishing": "loop fishing spot clicks",
-            "🏹 OSRS: Alching": "alch key + item click cycle",
-            "📦 OSRS: Inventory Drop": "fast item drop pattern",
-            "💎 OSRS: Woodcutting": "wait for tree depletion then click",
-            "🏭 OSRS: Smithing": "repeat smithing interaction",
-            "🔥 OSRS: Burning Logs": "right-click + burn flow",
-            "🚗 FiveM: Auto Cruise": "hold drive + occasional adjust",
-            "💼 FiveM: Click Interaction": "E interact + click loop",
-            "🎰 FiveM: Slot Machine": "rapid interaction loop",
-            "🏪 FiveM: Store Robbery": "open + interact sequence",
-            "⛏️ Minecraft: Auto Mine": "continuous mining clicks",
-            "🧱 Minecraft: Block Builder": "place + move pattern",
-            "🎣 Minecraft: AFK Fishing": "cast, wait, reel loop",
-            "🌾 Minecraft: Farm Crop": "harvest + move rhythm",
-            "⚔️ WoW: Melee DPS Rotation": "1-2-3 rotation loop",
-            "🧿 WoW: Gathering (Herb/Ore)": "interact + move + repeat",
-            "💊 WoW: Healing Rotation": "healing key cadence",
-            "🎯 Valorant: Aim Practice": "click + reposition drill",
-            "🏃 Valorant: Ability Spam": "q/e timing loop",
-            "🔄 Click Loop": "simple repeated clicking",
-            "⌨️ Key Spam": "repeat key press pattern",
-            "⏸️ Wait & Click": "delay then click"
+            "OSRS: Copper Mining": "re-click ore when depleted",
+            "OSRS: AFK Fishing": "loop fishing spot clicks",
+            "OSRS: Alching": "alch key + item click cycle",
+            "OSRS: Inventory Drop": "fast item drop pattern",
+            "OSRS: Woodcutting": "wait for tree depletion then click",
+            "OSRS: Smithing": "repeat smithing interaction",
+            "OSRS: Burning Logs": "right-click + burn flow",
+            "FiveM: Auto Cruise": "hold drive + occasional adjust",
+            "FiveM: Click Interaction": "E interact + click loop",
+            "FiveM: Slot Machine": "rapid interaction loop",
+            "FiveM: Store Robbery": "open + interact sequence",
+            "Minecraft: Auto Mine": "continuous mining clicks",
+            "Minecraft: Block Builder": "place + move pattern",
+            "Minecraft: AFK Fishing": "cast, wait, reel loop",
+            "Minecraft: Farm Crop": "harvest + move rhythm",
+            "WoW: Melee DPS Rotation": "1-2-3 rotation loop",
+            "WoW: Gathering (Herb/Ore)": "interact + move + repeat",
+            "WoW: Healing Rotation": "healing key cadence",
+            "Valorant: Aim Practice": "click + reposition drill",
+            "Valorant: Ability Spam": "q/e timing loop",
+            "Click Loop": "simple repeated clicking",
+            "Key Spam": "repeat key press pattern",
+            "Wait & Click": "delay then click"
         }
         summary = summaries.get(template_name, "quick starter macro")
         if len(summary) > 26:
@@ -4719,7 +4786,7 @@ class MacroEditorPage(CardPage):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(4)
         lbl = QLabel(text)
-        hint = QPushButton("?")
+        hint = QPushButton("❓")
         hint.setFixedSize(18, 18)
         hint.setToolTip(tooltip)
         hint.setStyleSheet("font-size: 10px; font-weight: bold; padding: 0;")
@@ -4766,7 +4833,7 @@ class MacroEditorPage(CardPage):
         grid.addWidget(QLabel("Key:"), 0, 0)
         key_row = QHBoxLayout()
         self.key_input = QLineEdit("a")
-        self.capture_key_btn = QPushButton("🎹 Press Key")
+        self.capture_key_btn = QPushButton("⌨️ Press Key")
         self.capture_key_btn.clicked.connect(self.start_key_capture)
         self.is_capturing_key = False
         key_row.addWidget(self.key_input)
@@ -4973,7 +5040,7 @@ class MacroEditorPage(CardPage):
         layout.setSpacing(8)
         
         # Position section
-        pos_group = CollapsibleGroupBox("📍 Pixel Position")
+        pos_group = CollapsibleGroupBox("Pixel Position")
         pos_layout = QGridLayout()
         pos_layout.setSpacing(10)
         pos_layout.setColumnStretch(1, 1)
@@ -5000,7 +5067,7 @@ class MacroEditorPage(CardPage):
         layout.addWidget(pos_group)
         
         # Color section
-        color_group = CollapsibleGroupBox("🎨 Target Color")
+        color_group = CollapsibleGroupBox("Target Color")
         color_layout = QGridLayout()
         color_layout.setSpacing(10)
         
@@ -5029,7 +5096,7 @@ class MacroEditorPage(CardPage):
         layout.addWidget(color_group)
 
         # Wait settings
-        wait_group = CollapsibleGroupBox("⏱️ Wait Settings")
+        wait_group = CollapsibleGroupBox("Wait Settings")
         wait_layout = QGridLayout()
         wait_layout.setSpacing(10)
         
@@ -5076,7 +5143,7 @@ class MacroEditorPage(CardPage):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
         
-        image_group = CollapsibleGroupBox("🖼️ Template Image")
+        image_group = CollapsibleGroupBox("Template Image")
         image_layout = QGridLayout()
         image_layout.setSpacing(10)
 
@@ -5110,7 +5177,7 @@ class MacroEditorPage(CardPage):
         image_group.setChecked(True)
         layout.addWidget(image_group)
         
-        region_group = CollapsibleGroupBox("📐 Search Region (optional)")
+        region_group = CollapsibleGroupBox("Search Region (optional)")
         region_layout = QGridLayout()
         region_layout.setSpacing(10)
         
@@ -5140,7 +5207,7 @@ class MacroEditorPage(CardPage):
         self.image_region_h.setMinimumHeight(32)
         region_layout.addWidget(self.image_region_h, 1, 3)
 
-        pick_region_btn = QPushButton("🖼️ Drag to Select Region on Screen")
+        pick_region_btn = QPushButton("🔲 Drag to Select Region on Screen")
         pick_region_btn.setMinimumHeight(38)
         pick_region_btn.setStyleSheet("font-weight: bold;")
         pick_region_btn.clicked.connect(self.pick_image_match_region_from_screen)
@@ -5165,7 +5232,7 @@ class MacroEditorPage(CardPage):
         layout.setSpacing(8)
         
         # Region position section
-        region_group = CollapsibleGroupBox("📐 Screen Region")
+        region_group = CollapsibleGroupBox("Screen Region")
         region_layout = QGridLayout()
         region_layout.setSpacing(10)
         region_layout.setColumnStretch(1, 1)
@@ -5199,7 +5266,7 @@ class MacroEditorPage(CardPage):
         self.region_h_spin.setMinimumHeight(32)
         region_layout.addWidget(self.region_h_spin, 1, 3)
         
-        pick_region_btn = QPushButton("🖼️ Drag to Select Region on Screen")
+        pick_region_btn = QPushButton("🔲 Drag to Select Region on Screen")
         pick_region_btn.setMinimumHeight(38)
         pick_region_btn.setStyleSheet("font-weight: bold;")
         pick_region_btn.clicked.connect(self.pick_region_from_screen)
@@ -5209,7 +5276,7 @@ class MacroEditorPage(CardPage):
         layout.addWidget(region_group)
         
         # Watch settings
-        watch_group = CollapsibleGroupBox("👁️ Watch Settings")
+        watch_group = CollapsibleGroupBox("Watch Settings")
         watch_layout = QGridLayout()
         watch_layout.setSpacing(10)
         
@@ -5380,7 +5447,7 @@ class MacroEditorPage(CardPage):
         layout.setSpacing(8)
 
         # Region section
-        region_group = QGroupBox("📐 OCR Region")
+        region_group = QGroupBox("OCR Region")
         region_layout = QGridLayout(region_group)
         region_layout.setSpacing(10)
         region_layout.setColumnStretch(1, 1)
@@ -5412,7 +5479,7 @@ class MacroEditorPage(CardPage):
         self.skill_region_h.setMinimumHeight(32)
         region_layout.addWidget(self.skill_region_h, 1, 3)
 
-        pick_region_btn = QPushButton("🖼️ Select OCR Region on Screen")
+        pick_region_btn = QPushButton("🔲 Select OCR Region on Screen")
         pick_region_btn.setMinimumHeight(38)
         pick_region_btn.setStyleSheet("font-weight: bold;")
         pick_region_btn.clicked.connect(self.pick_skill_check_region)
@@ -5420,7 +5487,7 @@ class MacroEditorPage(CardPage):
         layout.addWidget(region_group)
 
         # OCR settings
-        ocr_group = QGroupBox("⚙️ OCR Settings")
+        ocr_group = QGroupBox("OCR Settings")
         ocr_layout = QGridLayout(ocr_group)
         ocr_layout.setSpacing(10)
         
@@ -5441,7 +5508,7 @@ class MacroEditorPage(CardPage):
         ocr_layout.addWidget(self.skill_key_delay, 1, 1)
         layout.addWidget(ocr_group)
 
-        test_ocr_btn = QPushButton("🧪 Test OCR on Current Region")
+        test_ocr_btn = QPushButton("📝 Test OCR on Current Region")
         test_ocr_btn.setMinimumHeight(38)
         test_ocr_btn.setStyleSheet("font-weight: bold;")
         test_ocr_btn.clicked.connect(self.test_skill_check_ocr)
@@ -5526,7 +5593,7 @@ class MacroEditorPage(CardPage):
         layout.setSpacing(10)
         
         # Title
-        title = QLabel("⚡ Advanced: IF/THEN/ELSE Conditional Logic")
+        title = QLabel("🔧 Advanced: IF/THEN/ELSE Conditional Logic")
         title.setStyleSheet("font-weight: bold; font-size: 12px; color: #00D4FF;")
         layout.addWidget(title)
         
@@ -5548,7 +5615,7 @@ class MacroEditorPage(CardPage):
         cond_layout.addLayout(grid)
 
         # Pixel condition controls (same flow as Pixel Check)
-        self.cond_pixel_group = QGroupBox("🎯 Pixel Match Condition")
+        self.cond_pixel_group = QGroupBox("Pixel Match Condition")
         pixel_layout = QGridLayout(self.cond_pixel_group)
         pixel_layout.setSpacing(8)
         pixel_layout.addWidget(QLabel("Position X:"), 0, 0)
@@ -5588,7 +5655,7 @@ class MacroEditorPage(CardPage):
         cond_layout.addWidget(self.cond_pixel_group)
 
         # Image condition controls (same flow as Image Match)
-        self.cond_image_group = QGroupBox("🖼️ Image Match Condition")
+        self.cond_image_group = QGroupBox("Image Match Condition")
         image_layout = QGridLayout(self.cond_image_group)
         image_layout.setSpacing(8)
 
@@ -5634,14 +5701,14 @@ class MacroEditorPage(CardPage):
         self.cond_image_region_h.setValue(1080)
         image_layout.addWidget(self.cond_image_region_h, 4, 3)
 
-        pick_cond_region_btn = QPushButton("🖼️ Drag to Select Region on Screen")
+        pick_cond_region_btn = QPushButton("🔲 Drag to Select Region on Screen")
         pick_cond_region_btn.setMinimumHeight(34)
         pick_cond_region_btn.clicked.connect(self.pick_conditional_region_from_screen)
         image_layout.addWidget(pick_cond_region_btn, 5, 0, 1, 4)
         cond_layout.addWidget(self.cond_image_group)
 
         # Region watch controls
-        self.cond_region_group = QGroupBox("📐 Region Watch Condition")
+        self.cond_region_group = QGroupBox("Region Watch Condition")
         region_layout = QGridLayout(self.cond_region_group)
         region_layout.setSpacing(8)
         region_layout.addWidget(QLabel("Region X:"), 0, 0)
@@ -5664,7 +5731,7 @@ class MacroEditorPage(CardPage):
         self.cond_region_h.setValue(100)
         region_layout.addWidget(self.cond_region_h, 1, 3)
 
-        pick_cond_watch_region_btn = QPushButton("🖼️ Drag to Select Region on Screen")
+        pick_cond_watch_region_btn = QPushButton("🔲 Drag to Select Region on Screen")
         pick_cond_watch_region_btn.setMinimumHeight(34)
         pick_cond_watch_region_btn.clicked.connect(self.pick_conditional_region_from_screen)
         region_layout.addWidget(pick_cond_watch_region_btn, 2, 0, 1, 4)
@@ -5694,7 +5761,7 @@ class MacroEditorPage(CardPage):
         actions_layout.setSpacing(8)
         
         info_text = QLabel(
-            "✨ After adding this conditional, you can:\n"
+            "💡 After adding this conditional, you can:\n"
             "1. Right-click the conditional action in the sequence\n"
             "2. Select 'Configure Nested Actions'\n"
             "3. Add macros to execute if condition is TRUE\n"
@@ -5840,7 +5907,7 @@ class MacroEditorPage(CardPage):
                 self.key_input.setText(captured_key)
                 
                 self.is_capturing_key = False
-                self.capture_key_btn.setText("🎹 Press Key")
+                self.capture_key_btn.setText("⌨️ Press Key")
                 self.capture_key_btn.setEnabled(True)
                 self.key_input.setEnabled(True)
                 
@@ -5859,14 +5926,14 @@ class MacroEditorPage(CardPage):
                 if self.is_capturing_key:
                     self.is_capturing_key = False
                     listener.stop()
-                    self.capture_key_btn.setText("🎹 Press Key")
+                    self.capture_key_btn.setText("⌨️ Press Key")
                     self.capture_key_btn.setEnabled(True)
                     self.key_input.setEnabled(True)
             QTimer.singleShot(10000, _capture_timeout)
         except ImportError:
             logger.warning("pynput not installed - key capture disabled")
             self.is_capturing_key = False
-            self.capture_key_btn.setText("🎹 Press Key")
+            self.capture_key_btn.setText("⌨️ Press Key")
             self.capture_key_btn.setEnabled(True)
             self.key_input.setEnabled(True)
     
@@ -6121,7 +6188,7 @@ class MacroEditorPage(CardPage):
         preview = "Preview: Ready"
         try:
             if action_type == "Keyboard Key":
-                preview = f"Preview: Press key '{self.key_input.text() or '?'}' ({self.key_type_combo.currentText()}) for {self.key_duration_spin.value()}ms"
+                preview = f"Preview: Press key '{self.key_input.text() or '(no key)'}' ({self.key_type_combo.currentText()}) for {self.key_duration_spin.value()}ms"
             elif action_type == "Mouse Click":
                 preview = f"Preview: {self.click_button_combo.currentText()} click x{self.clicks_spin.value()} at ({self.click_x_spin.value()}, {self.click_y_spin.value()})"
             elif action_type in ("Mouse Move", "Mouse Position"):
@@ -6538,19 +6605,19 @@ class MacroEditorPage(CardPage):
     def _toggle_exec_log(self, checked: bool):
         """Show/hide the execution log list."""
         self.exec_log_list.setVisible(checked)
-        self._exec_log_toggle_btn.setText("▲ Hide Log" if checked else "▼ Show Log")
+        self._exec_log_toggle_btn.setText("👁️ Hide Log" if checked else "👁️ Show Log")
 
     def _toggle_run_history(self, checked: bool):
         """Show/hide the run history list."""
         self.run_history_list.setVisible(checked)
         count = len(self._run_history_entries)
         self._run_history_toggle_btn.setText(
-            f"{'▲' if checked else '▼'} Run History ({count})")
+            f"{('▼' if checked else '▶')} Run History ({count})")
 
     def _add_run_history_entry(self, label: str, success: bool):
         """Prepend a timestamped run outcome to the history list (max 10 entries)."""
         from datetime import datetime as _dt
-        prof_name = self.current_profile.name if self.current_profile else "?"
+        prof_name = self.current_profile.name if self.current_profile else "(no profile)"
         icon = "OK" if success else "ERR"
         entry = f"[{icon}] {_dt.now().strftime('%H:%M:%S')} | {prof_name} | {label}"
         self._run_history_entries.insert(0, entry)
@@ -6562,7 +6629,7 @@ class MacroEditorPage(CardPage):
         checked = self._run_history_toggle_btn.isChecked()
         count = len(self._run_history_entries)
         self._run_history_toggle_btn.setText(
-            f"{'▲' if checked else '▼'} Run History ({count})")
+            f"{'▼' if checked else '▶'} Run History ({count})")
 
     def log_exec_event(self, text: str):
         """Append a timestamped message to the exec log panel."""
@@ -6715,8 +6782,8 @@ class MacroEditorPage(CardPage):
             menu.addSeparator()
 
         dup_action = menu.addAction("📋 Duplicate")
-        move_up_action = menu.addAction("⬆️ Move Up")
-        move_down_action = menu.addAction("⬇️ Move Down")
+        move_up_action = menu.addAction("↑ Move Up")
+        move_down_action = menu.addAction("↓ Move Down")
         menu.addSeparator()
         del_action = menu.addAction("🗑️ Delete")
 
@@ -7092,7 +7159,7 @@ class MacroEditorPage(CardPage):
             preview_label.setAlignment(Qt.AlignCenter)
             preview_label.setMinimumHeight(80)
             preview_label.setStyleSheet("border: 1px solid #444; border-radius: 4px; padding: 4px;")
-            pick_region_btn = QPushButton("🖼️ Pick Region")
+            pick_region_btn = QPushButton("🔲 Pick Region")
 
             def update_preview(path: str):
                 if not path or not os.path.exists(path):
@@ -7163,7 +7230,7 @@ class MacroEditorPage(CardPage):
                     trigger_combo.addItem(nested_action.trigger_macro_name)
                 trigger_combo.setCurrentText(nested_action.trigger_macro_name)
 
-            pick_region_btn = QPushButton("🖼️ Pick Region")
+            pick_region_btn = QPushButton("🔲 Pick Region")
             pick_color_btn = QPushButton("🎨 Pick Color")
 
             def on_pick_region(x, y, width, height):
@@ -7278,7 +7345,7 @@ class MacroEditorPage(CardPage):
             max_digits = NoWheelSpinBox(); max_digits.setRange(1, 16); max_digits.setValue(int(nested_action.max_digits))
             key_delay = NoWheelSpinBox(); key_delay.setRange(10, 1000); key_delay.setValue(int(nested_action.key_delay_ms))
             press_ms = NoWheelSpinBox(); press_ms.setRange(10, 1000); press_ms.setValue(int(getattr(nested_action, 'key_press_ms', 40)))
-            pick_btn = QPushButton("🖼️ Pick Skill Region")
+            pick_btn = QPushButton("🔲 Pick Skill Region")
 
             def on_region_pick(x, y, width, height):
                 rx.setValue(x)
@@ -7361,7 +7428,7 @@ class MacroEditorPage(CardPage):
             i_preview.setAlignment(Qt.AlignCenter)
             i_preview.setMinimumHeight(72)
             i_preview.setStyleSheet("border: 1px solid #444; border-radius: 4px; padding: 4px;")
-            ipick = QPushButton("🖼️ Pick Region")
+            ipick = QPushButton("🔲 Pick Region")
 
             def update_nested_image_preview(path: str):
                 if not path or not os.path.exists(path):
@@ -7416,7 +7483,7 @@ class MacroEditorPage(CardPage):
             rgh = NoWheelSpinBox(); rgh.setRange(1, 9999); rgh.setValue(int(getattr(nested_action, 'region_h', 100)))
             rg_color = QLineEdit(getattr(nested_action, 'color', '#FF0000'))
             rg_tol = NoWheelSpinBox(); rg_tol.setRange(0, 255); rg_tol.setValue(int(getattr(nested_action, 'tolerance', 15)))
-            pick_region_btn = QPushButton("🖼️ Pick Region")
+            pick_region_btn = QPushButton("🔲 Pick Region")
             pick_region_color_btn = QPushButton("🎨 Pick Color")
 
             def on_pick_nested_region(x, y, width, height):
@@ -7563,8 +7630,8 @@ class MacroEditorPage(CardPage):
             page_layout.addLayout(add_row)
 
             btn_row = QHBoxLayout()
-            up_btn = QPushButton("⬆️ Up")
-            down_btn = QPushButton("⬇️ Down")
+            up_btn = QPushButton("↑ Up")
+            down_btn = QPushButton("↓ Down")
             remove_btn = QPushButton("🗑️ Remove")
             edit_btn = QPushButton("✏️ Edit")
             btn_row.addWidget(up_btn)
@@ -7628,8 +7695,8 @@ class MacroEditorPage(CardPage):
         true_actions_working = list(branch.if_true_actions or [])
         false_actions_working = list(branch.if_false_actions or [])
 
-        tabs.addTab(build_branch_tab("THEN", true_actions_working), "✅ THEN (TRUE)")
-        tabs.addTab(build_branch_tab("ELSE", false_actions_working), "❌ ELSE (FALSE)")
+        tabs.addTab(build_branch_tab("THEN", true_actions_working), "✓ THEN (TRUE)")
+        tabs.addTab(build_branch_tab("ELSE", false_actions_working), "✗ ELSE (FALSE)")
 
         footer = QHBoxLayout()
         footer.addStretch()
@@ -8196,7 +8263,7 @@ class RegionPickerOverlay(QWidget):
         painter.drawText(10, 30, "Drag to select region | ESC to cancel")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 class KeyCaptureEdit(QLineEdit):
     """Click-to-arm QLineEdit that records the next key combo (e.g. Ctrl+F12)."""
     combo_captured = Signal(str)   # emitted with e.g. "Ctrl+F12" or "Alt+F9"
@@ -8280,6 +8347,16 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle(f"🦥 Sloth v{APP_VERSION}")
         self.setGeometry(100, 100, 1400, 900)
+        
+        # Set window icon from GitHub download or cache
+        icon = get_cached_icon()
+        if not icon.isNull():
+            self.setWindowIcon(icon)
+            QApplication.instance().setWindowIcon(icon)
+            logger.info("Window icon set from embedded data")
+        else:
+            logger.warning("Failed to set window icon")
+        
         logger.info("Window title and geometry set")
         
         # Initialize QSettings for persistence
@@ -8334,9 +8411,9 @@ class MainWindow(QMainWindow):
         self.nav_buttons = {}
         nav_items = [
             ("🏠 Home", "home"),
-            ("📁 Profile Manager", "profiles"),
-            ("✏️ Macro Editor", "editor"),
-            ("⚙️ Settings", "settings"),
+            ("📋 Profile Manager", "profiles"),
+            ("⚙️ Macro Editor", "editor"),
+            ("🔧 Settings", "settings"),
         ]
         
         self.nav_group = QButtonGroup(self)
@@ -8353,7 +8430,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(20)
         
         # Floating toolbar button
-        toolbar_btn = QPushButton("🔧 Show Toolbar")
+        toolbar_btn = QPushButton("📦 Show Toolbar")
         toolbar_btn.setToolTip("Show the floating macro toolbar")
         toolbar_btn.clicked.connect(self.show_macro_toolbar)
         toolbar_btn.setIcon(QIcon())  # No icon
@@ -8361,7 +8438,7 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
-        support_btn = QPushButton("☕ Support")
+        support_btn = QPushButton("☕ Support Me")
         support_btn.setToolTip("Buy Me a Coffee")
         support_btn.setStyleSheet("font-size: 11px; color: #777; padding: 4px 8px;")
         support_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/orvlyn")))
@@ -8560,12 +8637,12 @@ class MainWindow(QMainWindow):
         page = CardPage("Settings")
         
         # Header
-        title = QLabel("⚙️ Settings")
+        title = QLabel("Settings")
         title.setStyleSheet("font-size: 28px; font-weight: bold; margin-bottom: 25px;")
         page.card_layout.addWidget(title)
         
         # Documentation Section
-        doc_section = QGroupBox("📖 Documentation & Help")
+        doc_section = QGroupBox("Documentation & Help")
         doc_layout = QVBoxLayout(doc_section)
         
         help_btn = QPushButton("📖 Open Complete Help Guide")
@@ -8581,7 +8658,7 @@ class MainWindow(QMainWindow):
         page.card_layout.addWidget(doc_section)
         
         # Theme Section
-        theme_group = QGroupBox("🎨 Appearance & Theme")
+        theme_group = QGroupBox("Appearance & Theme")
         theme_layout = QVBoxLayout(theme_group)
         
         theme_label = QLabel("Choose your theme:")
@@ -8603,7 +8680,7 @@ class MainWindow(QMainWindow):
         theme_layout.addWidget(self.theme_combo)
 
         # "Configure" button - only visible when custom is selected
-        self.configure_custom_btn = QPushButton("🎨  Configure Custom Theme...")
+        self.configure_custom_btn = QPushButton("🎨 Configure Custom Theme...")
         self.configure_custom_btn.setToolTip("Open the custom color editor")
         self.configure_custom_btn.setMinimumHeight(34)
         self.configure_custom_btn.setStyleSheet("font-weight: bold;")
@@ -8621,7 +8698,7 @@ class MainWindow(QMainWindow):
         page.card_layout.addWidget(theme_group)
         
         # Window Section
-        window_group = QGroupBox("🪟 Window Behavior")
+        window_group = QGroupBox("Window Behavior")
         window_layout = QVBoxLayout(window_group)
         
         # Transparency
@@ -8648,7 +8725,7 @@ class MainWindow(QMainWindow):
         trans_slider_row.addWidget(self.transparency_value)
         window_layout.addLayout(trans_slider_row)
         
-        trans_tip = QLabel("💡 Lower opacity = see game behind window (useful while playing)")
+        trans_tip = QLabel("Lower opacity = see game behind window (useful while playing)")
         trans_tip.setStyleSheet("font-size: 11px; color: #A0A0A0; margin-top: 8px; font-style: italic;")
         window_layout.addWidget(trans_tip)
         
@@ -8683,7 +8760,7 @@ class MainWindow(QMainWindow):
         move_window_btn.clicked.connect(self.restore_to_preferred_monitor)
         window_layout.addWidget(move_window_btn)
 
-        monitor_tip = QLabel("💡 Coordinate and region pickers now span all connected displays.")
+        monitor_tip = QLabel("Coordinate and region pickers now span all connected displays.")
         monitor_tip.setStyleSheet("font-size: 11px; color: #A0A0A0; margin-top: 6px; font-style: italic;")
         monitor_tip.setWordWrap(True)
         window_layout.addWidget(monitor_tip)
@@ -8691,7 +8768,7 @@ class MainWindow(QMainWindow):
         page.card_layout.addWidget(window_group)
         
         # Safety Features Section
-        safety_group = QGroupBox("🛡️ Safety & Protection")
+        safety_group = QGroupBox("Safety & Protection")
         safety_layout = QVBoxLayout(safety_group)
         
         afk_desc = QLabel("Automatic AFK Detection stops your macro if inactivity is detected.")
@@ -8773,7 +8850,7 @@ class MainWindow(QMainWindow):
         page.card_layout.addWidget(safety_group)
         
         # Data Management Section
-        data_group = QGroupBox("💾 Data & Backups")
+        data_group = QGroupBox("Data & Backups")
         data_layout = QVBoxLayout(data_group)
         
         backup_desc = QLabel("Automatic backups are created every 6 hours. Create a manual backup anytime.")
@@ -8781,7 +8858,7 @@ class MainWindow(QMainWindow):
         data_layout.addWidget(backup_desc)
         
         backup_btn_layout = QHBoxLayout()
-        create_backup_btn = QPushButton("📦 Create Backup Now")
+        create_backup_btn = QPushButton("💾 Create Backup Now")
         create_backup_btn.setMinimumHeight(40)
         create_backup_btn.clicked.connect(self.create_backup_now)
         backup_btn_layout.addWidget(create_backup_btn)
@@ -8812,7 +8889,7 @@ class MainWindow(QMainWindow):
         page.card_layout.addWidget(hotkey_group)
         
         # Runtime Environment
-        deps_group = QGroupBox("🔧 Runtime Environment")
+        deps_group = QGroupBox("Runtime Environment")
         deps_layout = QVBoxLayout(deps_group)
 
         ocr_bundle_status = QLabel(
@@ -8896,6 +8973,7 @@ class MainWindow(QMainWindow):
                 else:
                     result[:] = ['uptodate', None, None]
             except Exception as e:
+                logger.debug(f"Manual update check failed: {e}")
                 result[:] = ['error', str(e), None]
 
             # 3-arg form: posts _finish to self's thread (main thread) safely
@@ -9109,12 +9187,13 @@ class MainWindow(QMainWindow):
         """Clear tracked modifier key state on release."""
         try:
             from pynput.keyboard import Key as _PKey
-            if key in (_PKey.ctrl_l, _PKey.ctrl_r, _PKey.ctrl):
-                self._held_modifiers.discard('ctrl')
-            elif key in (_PKey.alt_l, _PKey.alt_r, _PKey.alt):
-                self._held_modifiers.discard('alt')
-            elif key in (_PKey.shift_l, _PKey.shift_r, _PKey.shift):
-                self._held_modifiers.discard('shift')
+            with self._hotkey_lock:
+                if key in (_PKey.ctrl_l, _PKey.ctrl_r, _PKey.ctrl):
+                    self._held_modifiers.discard('ctrl')
+                elif key in (_PKey.alt_l, _PKey.alt_r, _PKey.alt):
+                    self._held_modifiers.discard('alt')
+                elif key in (_PKey.shift_l, _PKey.shift_r, _PKey.shift):
+                    self._held_modifiers.discard('shift')
         except Exception:
             pass
 
@@ -9158,6 +9237,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Cleanup listeners on app close."""
+        # Stop backup timer
+        if hasattr(self, '_auto_backup_timer') and self._auto_backup_timer:
+            self._auto_backup_timer.stop()
+        
         try:
             if hasattr(self, 'editor_page') and self.editor_page:
                 self.editor_page.save_current_profile()
@@ -9165,8 +9248,8 @@ class MainWindow(QMainWindow):
                 if overlay:
                     try:
                         overlay.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to close overlay: {e}")
                 # Stop any running macro executor cleanly
                 executor = getattr(self.editor_page, 'executor', None)
                 if executor and executor.isRunning():
@@ -9179,15 +9262,15 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'macro_toolbar') and self.macro_toolbar:
                 try:
                     self.macro_toolbar.close()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug(f"Failed to close toolbar: {e}")
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {e}")
         # Ensure all settings (theme, etc.) are flushed to disk before exit
         try:
             self.settings.sync()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to sync settings: {e}")
         super().closeEvent(event)
     
     def switch_page(self, page_id: str):
@@ -9220,7 +9303,7 @@ class MainWindow(QMainWindow):
         stylesheet = generate_stylesheet(theme_name, theme_override=theme_data)
         logger.info(f"Generated stylesheet length: {len(stylesheet)} characters")
         self.setStyleSheet(stylesheet)
-        # Keep theme_combo in sync (block signals so change_theme doesn’t re-fire)
+        # Keep theme_combo in sync (block signals so change_theme doesn't re-fire)
         if hasattr(self, 'theme_combo'):
             theme_keys = list(THEMES.keys())
             if theme_name in theme_keys:
