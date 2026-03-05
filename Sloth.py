@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import json
 import time
@@ -89,7 +89,7 @@ TESSERACT_AVAILABLE = configure_tesseract()
 # VERSION & UPDATE CHECK
 # ============================
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Orvlyn/Sloth/main/version.json"
 
 
@@ -1351,8 +1351,21 @@ class MacroExecutor(QThread):
                 'return': Key.enter,
                 'tab': Key.tab,
                 'shift': Key.shift,
+                'shift_l': Key.shift_l,
+                'shift_r': Key.shift_r,
                 'ctrl': Key.ctrl,
+                'ctrl_l': Key.ctrl_l,
+                'ctrl_r': Key.ctrl_r,
                 'alt': Key.alt,
+                'alt_l': Key.alt_l,
+                'alt_r': Key.alt_r,
+                'alt_gr': Key.alt_gr,
+                'cmd': Key.cmd,
+                'cmd_l': Key.cmd_l,
+                'cmd_r': Key.cmd_r,
+                'win': Key.cmd,
+                'super': Key.cmd,
+                'menu': Key.menu,
                 'esc': Key.esc,
                 'escape': Key.esc,
                 'up': Key.up,
@@ -1375,6 +1388,9 @@ class MacroExecutor(QThread):
                 'f4': Key.f4, 'f5': Key.f5, 'f6': Key.f6,
                 'f7': Key.f7, 'f8': Key.f8, 'f9': Key.f9,
                 'f10': Key.f10, 'f11': Key.f11, 'f12': Key.f12,
+                'f13': Key.f13, 'f14': Key.f14, 'f15': Key.f15,
+                'f16': Key.f16, 'f17': Key.f17, 'f18': Key.f18,
+                'f19': Key.f19, 'f20': Key.f20,
             }
         except ImportError:
             self.has_pynput = False
@@ -1577,15 +1593,19 @@ class MacroExecutor(QThread):
 
         key_to_press = key_map.get(key, key)
         
-        if action.press_type == "press":
-            self.keyboard.press(key_to_press)
-            time.sleep(action.hold_duration / 1000.0)
-            self.keyboard.release(key_to_press)
-        elif action.press_type == "hold":
-            self.keyboard.press(key_to_press)
-            time.sleep(action.hold_duration / 1000.0)
-        elif action.press_type == "release":
-            self.keyboard.release(key_to_press)
+        try:
+            if action.press_type == "press":
+                self.keyboard.press(key_to_press)
+                time.sleep(action.hold_duration / 1000.0)
+                self.keyboard.release(key_to_press)
+            elif action.press_type == "hold":
+                self.keyboard.press(key_to_press)
+                time.sleep(action.hold_duration / 1000.0)
+            elif action.press_type == "release":
+                self.keyboard.release(key_to_press)
+        except Exception as e:
+            logger.warning(f"Key action failed for '{key}': {e}")
+            raise ValueError(f"Unknown key '{key}' - check your macro action") from e
     
     def _execute_mouse_click(self, action: MouseClickAction):
         """Execute mouse click action."""
