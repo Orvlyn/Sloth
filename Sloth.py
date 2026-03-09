@@ -127,7 +127,7 @@ TESSERACT_AVAILABLE = configure_tesseract()
 # VERSION & UPDATE CHECK
 # ============================
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Orvlyn/Sloth/main/version.json"
 
 
@@ -1285,7 +1285,7 @@ class MacroProfile:
     name: str
     game: str  # "OSRS", "FiveM", "General", etc.
     description: str = ""
-    hotkey: str = "F1"
+    hotkey: str = "None"
     actions: List[MacroAction] = None
     loop_enabled: bool = False
     loop_count: int = 1
@@ -1328,7 +1328,7 @@ class MacroProfile:
             name=data.get('name', 'Untitled'),
             game=data.get('game', 'General'),
             description=data.get('description', ''),
-            hotkey=data.get('hotkey', 'F1'),
+            hotkey=data.get('hotkey', 'None'),
             actions=actions,
             loop_enabled=data.get('loop_enabled', False),
             loop_count=data.get('loop_count', 1)
@@ -2447,7 +2447,7 @@ class HelpDialog(QDialog):
             <td width="50%" style="background:{bg_medium}; border:1px solid {border}; border-radius:8px; vertical-align:top;">
                 <h3 style="margin:0 0 8px 0; color:{accent};">Quick Start</h3>
                 <ol style="margin:0; padding-left:18px; color:{text_primary};">
-                    <li><b>Profile Manager</b> - create a profile, set name, game, hotkey, loop mode.</li>
+                    <li><b>Profile Manager</b> - create a profile, set name, game, hotkey (any key combo), loop mode.</li>
                     <li><b>Macro Editor</b> - insert a template or add actions manually.</li>
                     <li>Pick coordinates with the <b>Pick</b> button (cross-hair overlay).</li>
                     <li>Click <b>▶️ Test Run</b> to verify behavior before going live.</li>
@@ -2480,7 +2480,7 @@ class HelpDialog(QDialog):
             <th align="left" style="border:1px solid {border};">Tips</th>
         </tr>
         <tr><td style="border:1px solid {border};"><b>Home</b></td><td style="border:1px solid {border};">Navigation and quick links</td><td style="border:1px solid {border};">Jump to Profile Manager or Editor from here</td></tr>
-        <tr><td style="border:1px solid {border};"><b>Profile Manager</b></td><td style="border:1px solid {border};">Create / edit / import / export profiles</td><td style="border:1px solid {border};">Set unique hotkeys per profile; use search/sort to find profiles fast</td></tr>
+        <tr><td style="border:1px solid {border};"><b>Profile Manager</b></td><td style="border:1px solid {border};">Create / edit / import / export profiles</td><td style="border:1px solid {border};">Set unique hotkeys per profile (any key combo supported); use search/sort to find profiles fast</td></tr>
         <tr><td style="border:1px solid {border};"><b>Macro Editor</b></td><td style="border:1px solid {border};">Build and run action sequences</td><td style="border:1px solid {border};">Test often; keep sequences short and modular</td></tr>
         <tr><td style="border:1px solid {border};"><b>Templates</b></td><td style="border:1px solid {border};">Prebuilt action flows by game</td><td style="border:1px solid {border};">Insert a template then customize coordinates and delays</td></tr>
         <tr><td style="border:1px solid {border};"><b>Settings</b></td><td style="border:1px solid {border};">Theme, opacity, safety, AFK, backup</td><td style="border:1px solid {border};">Set theme first; configure safety timeout and AFK detection</td></tr>
@@ -2518,7 +2518,7 @@ class HelpDialog(QDialog):
                 <ul style="margin:0; padding-left:18px; color:{text_primary};">
                     <li><b>Name</b> - identifies the profile; shown in lists and hotkey overlays.</li>
                     <li><b>Game</b> - used for grouping; shown as [Game] tag in lists.</li>
-                    <li><b>Hotkey</b> - F1-F12 key that starts/stops this profile globally.</li>
+                    <li><b>Hotkey</b> - Any key or key combination (e.g., F5, Ctrl+F8, Alt+Q) that starts/stops this profile globally.</li>
                     <li><b>Description</b> - notes for yourself; not used during execution.</li>
                     <li><b>Loop modes:</b><br>
                         &nbsp;&nbsp;• <i>Loop Once</i> - run the sequence a single time then stop.<br>
@@ -3956,9 +3956,10 @@ class ProfileManagerPage(CardPage):
         form.addWidget(self.game_combo, 1, 1)
         
         form.addWidget(QLabel("Hotkey:"), 2, 0)
-        self.hotkey_combo = NoWheelComboBox()
-        self.hotkey_combo.addItems([f"F{i}" for i in range(1, 13)])
-        form.addWidget(self.hotkey_combo, 2, 1)
+        self.hotkey_edit = KeyCaptureEdit()
+        self.hotkey_edit.setPlaceholderText("Click here and press any key combo (e.g., Ctrl+F5, F8, Mouse4)")
+        self.hotkey_edit.setMinimumWidth(200)
+        form.addWidget(self.hotkey_edit, 2, 1)
         
         form.addWidget(QLabel("Description:"), 3, 0)
         self.desc_input = QTextEdit()
@@ -4146,7 +4147,7 @@ class ProfileManagerPage(CardPage):
         """Fill form with profile data."""
         self.name_input.setText(profile.name)
         self.game_combo.setCurrentText(profile.game)
-        self.hotkey_combo.setCurrentText(profile.hotkey)
+        self.hotkey_edit.setText(profile.hotkey if profile.hotkey and profile.hotkey != "None" else "")
         self.desc_input.setPlainText(profile.description)
         
         # Update loop settings
@@ -4168,7 +4169,7 @@ class ProfileManagerPage(CardPage):
         # Update profile from form
         self.current_profile.name = self.name_input.text() or "Untitled"
         self.current_profile.game = self.game_combo.currentText()
-        self.current_profile.hotkey = self.hotkey_combo.currentText()
+        self.current_profile.hotkey = self.hotkey_edit.text().strip() if self.hotkey_edit.text().strip() else "None"
         self.current_profile.description = self.desc_input.toPlainText()
         
         # Handle loop settings
@@ -4269,7 +4270,7 @@ class ProfileManagerPage(CardPage):
         # Clear form fields
         self.name_input.clear()
         self.game_combo.setCurrentIndex(0)
-        self.hotkey_combo.setCurrentIndex(0)
+        self.hotkey_edit.clear()
         self.desc_input.clear()
         self.loop_enabled_combo.setCurrentText("Loop Once (No Loop)")
         self.loop_count_spinner.setValue(1)
@@ -5853,10 +5854,17 @@ class MacroEditorPage(CardPage):
             if not os.path.exists(profiles_dir):
                 return
             
-            macro_files = [f for f in os.listdir(profiles_dir) if f.endswith('.json')]
-            macro_names = [f[:-5] for f in sorted(macro_files)]  # Remove .json extension
-            
-            for name in macro_names:
+            macro_files = sorted(f for f in os.listdir(profiles_dir) if f.endswith('.json'))
+            for filename in macro_files:
+                # Use the profile's actual name field so the value matches what
+                # MacroExecutor._trigger_macro() looks up (which searches by name, not filename).
+                try:
+                    filepath = os.path.join(profiles_dir, filename)
+                    with open(filepath, 'r', encoding='utf-8') as fh:
+                        data = json.load(fh)
+                    name = data.get('name') or filename[:-5]
+                except Exception:
+                    name = filename[:-5]  # Fallback to filename stem if JSON is unreadable
                 if combo_box.findText(name) == -1:  # Only add if not already present
                     combo_box.addItem(name)
         except Exception as e:
@@ -5904,12 +5912,14 @@ class MacroEditorPage(CardPage):
                 }
                 
                 captured_key = key_map.get(key_str.lower(), key_str.lower())
-                self.key_input.setText(captured_key)
-                
                 self.is_capturing_key = False
-                self.capture_key_btn.setText("⌨️ Press Key")
-                self.capture_key_btn.setEnabled(True)
-                self.key_input.setEnabled(True)
+                # Marshal UI updates to the Qt main thread (pynput callback runs on its own thread)
+                def _update_ui(k=captured_key):
+                    self.key_input.setText(k)
+                    self.capture_key_btn.setText("⌨️ Press Key")
+                    self.capture_key_btn.setEnabled(True)
+                    self.key_input.setEnabled(True)
+                QTimer.singleShot(0, _update_ui)
                 
                 return False  # Stop listening
             except Exception as e:
@@ -7868,8 +7878,13 @@ class MacroEditorPage(CardPage):
 
         try:
             main_window = self.window()
+            # Ensure toolbar is created when explicitly requested
             if show_toolbar and hasattr(main_window, 'ensure_macro_toolbar'):
-                toolbar = main_window.ensure_macro_toolbar()
+                main_window.ensure_macro_toolbar()
+            # Always wire up the toolbar if it already exists (handles the case where
+            # the user opened it manually and then triggered a run via hotkey/test button)
+            toolbar = getattr(main_window, 'macro_toolbar', None)
+            if toolbar is not None:
                 self.executor.progress.connect(lambda p, s: toolbar.set_progress(p, s))
                 self.executor.finished.connect(lambda m: toolbar.stop_execution())
                 toolbar.start_execution(profile.name)
@@ -8265,30 +8280,246 @@ class RegionPickerOverlay(QWidget):
 
 # -----------------------------------------------------------------------------
 class KeyCaptureEdit(QLineEdit):
-    """Click-to-arm QLineEdit that records the next key combo (e.g. Ctrl+F12)."""
-    combo_captured = Signal(str)   # emitted with e.g. "Ctrl+F12" or "Alt+F9"
+    """Click-to-arm QLineEdit that records the next key/mouse combo (e.g. Ctrl+F12, Mouse4, Ctrl+Left)."""
+    combo_captured = Signal(str)   # emitted with e.g. "Ctrl+F12", "Mouse4", "Alt+Left"
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        self.setPlaceholderText("Click here, then press your combo…")
+        self.setPlaceholderText("Click here, then press key or mouse button…")
         self.setCursor(Qt.PointingHandCursor)
         self._armed = False
+        self._kb_listener = None
+        self._mouse_listener = None
+        self._held_modifiers = set()
+        # Auto-disarm after 10 s if user does nothing
+        self._arm_timer = QTimer(self)
+        self._arm_timer.setSingleShot(True)
+        self._arm_timer.timeout.connect(self._disarm_capture)
+
+    # Combos that should never be set as hotkeys (system shortcuts / normal clicks)
+    _BLACKLISTED = frozenset({
+        'Ctrl+C', 'Ctrl+V', 'Ctrl+D', 'Ctrl+Z', 'Ctrl+Y',
+        'Del', 'Left', 'Right',
+    })
 
     def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        self._armed = True
-        self.setPlaceholderText("Press combo now (Esc to cancel)…")
-        self._highlight(True)
+        btn = event.button()
+        if not self._armed:
+            # Only left-click arms the widget
+            if btn == Qt.LeftButton:
+                super().mousePressEvent(event)
+                self._arm_capture()
+            event.accept()
+            return
+
+        # Widget is armed — left click cancels; other buttons capture
+        if btn == Qt.LeftButton:
+            self._disarm_capture()
+            event.accept()
+            return
+
+        # Map Qt button to name for direct capture
+        _btn_map = {
+            Qt.RightButton:   'Right',
+            Qt.MiddleButton:  'Middle',
+            Qt.BackButton:    'Mouse4',
+            Qt.ForwardButton: 'Mouse5',
+        }
+        mouse_name = _btn_map.get(btn)
+        if mouse_name is None:
+            # Extra buttons Qt.ExtraButton3+ — use numeric label
+            mouse_name = f'Mouse{int(btn):x}'
+
+        # Derive modifiers from Qt event (more reliable than the pynput-tracked set)
+        mods = event.modifiers()
+        parts = []
+        if mods & Qt.ControlModifier:
+            parts.append('Ctrl')
+        if mods & Qt.AltModifier:
+            parts.append('Alt')
+        if mods & Qt.ShiftModifier:
+            parts.append('Shift')
+        parts.append(mouse_name)
+        self._emit_combo(parts[-1], parts[:-1])
+        event.accept()
 
     def focusOutEvent(self, event):
+        # Do NOT disarm on focus-out: the click that stole focus may be the
+        # mouse button the user wants to capture.  We rely on Escape or a
+        # successful capture to disarm.
         super().focusOutEvent(event)
-        if self._armed:
-            self._armed = False
-            self.setPlaceholderText("Click here, then press your combo…")
-            self._highlight(False)
+
+    def _arm_capture(self):
+        """Start capturing keyboard/mouse input using pynput."""
+        self._armed = True
+        self._held_modifiers = set()
+        self.setPlaceholderText("Press key or click mouse button (Esc to cancel)…")
+        self._highlight(True)
+        self._arm_timer.start(10000)  # auto-cancel after 10 s
+
+        try:
+            from pynput import keyboard, mouse
+
+            # --- keyboard callback (runs in pynput thread) ---
+            def on_key_press(key):
+                if not self._armed:
+                    return False  # stop listener
+                try:
+                    from pynput.keyboard import Key as _PKey
+                    if key in (_PKey.ctrl_l, _PKey.ctrl_r, _PKey.ctrl):
+                        self._held_modifiers.add('Ctrl')
+                        return  # keep listening
+                    if key in (_PKey.alt_l, _PKey.alt_r, _PKey.alt):
+                        self._held_modifiers.add('Alt')
+                        return  # keep listening
+                    if key in (_PKey.shift_l, _PKey.shift_r, _PKey.shift):
+                        self._held_modifiers.add('Shift')
+                        return  # keep listening
+                    if key in (_PKey.esc, _PKey.escape):
+                        QTimer.singleShot(0, self._disarm_capture)
+                        return False  # stop listener
+                    key_name = self._extract_key_name_from_pynput(key)
+                    if key_name:
+                        # Snapshot modifiers NOW, then marshal to Qt main thread
+                        held = list(sorted(self._held_modifiers))
+                        QTimer.singleShot(0, lambda kn=key_name, hm=held: self._emit_combo(kn, hm))
+                        return False  # stop listener
+                except Exception:
+                    pass
+                return None  # keep listening for unrecognised keys
+
+            def on_key_release(key):
+                if not self._armed:
+                    return False
+                try:
+                    from pynput.keyboard import Key as _PKey
+                    if key in (_PKey.ctrl_l, _PKey.ctrl_r, _PKey.ctrl):
+                        self._held_modifiers.discard('Ctrl')
+                    elif key in (_PKey.alt_l, _PKey.alt_r, _PKey.alt):
+                        self._held_modifiers.discard('Alt')
+                    elif key in (_PKey.shift_l, _PKey.shift_r, _PKey.shift):
+                        self._held_modifiers.discard('Shift')
+                except Exception:
+                    pass
+
+            # --- mouse callback (runs in pynput thread) ---
+            def on_mouse_click(x, y, button, pressed):
+                if not self._armed or not pressed:
+                    return  # keep listening
+                try:
+                    from pynput.mouse import Button
+                    btn_str = str(button).lower()
+                    # Skip left/right — they are either for arming/cancelling or blacklisted
+                    if button == Button.left or button == Button.right:
+                        return  # keep listening
+                    if 'x1' in btn_str:
+                        mouse_name = 'Mouse4'
+                    elif 'x2' in btn_str:
+                        mouse_name = 'Mouse5'
+                    elif button == Button.middle:
+                        mouse_name = 'Middle'
+                    else:
+                        mouse_name = str(button)
+                    if mouse_name:
+                        held = list(sorted(self._held_modifiers))
+                        QTimer.singleShot(0, lambda mn=mouse_name, hm=held: self._emit_combo(mn, hm))
+                        return False  # stop listener
+                except Exception:
+                    pass
+                return None  # keep listening
+
+            self._kb_listener = keyboard.Listener(
+                on_press=on_key_press,
+                on_release=on_key_release,
+            )
+            self._kb_listener.daemon = True
+            self._kb_listener.start()
+
+            self._mouse_listener = mouse.Listener(on_click=on_mouse_click)
+            self._mouse_listener.daemon = True
+            self._mouse_listener.start()
+
+        except ImportError:
+            pass  # fall back to Qt keyPressEvent
+
+    def _disarm_capture(self):
+        """Stop capturing and clean up listeners."""
+        self._armed = False
+        self._held_modifiers = set()
+        self._arm_timer.stop()
+        self.setPlaceholderText("Click here, then press key or mouse button…")
+        self._highlight(False)
+
+        if self._kb_listener:
+            try:
+                self._kb_listener.stop()
+            except Exception:
+                pass
+            self._kb_listener = None
+
+        if self._mouse_listener:
+            try:
+                self._mouse_listener.stop()
+            except Exception:
+                pass
+            self._mouse_listener = None
+
+    def _extract_key_name_from_pynput(self, key) -> Optional[str]:
+        """Extract a display-style key name from a pynput key object."""
+        try:
+            from pynput.keyboard import Key as _PKey, KeyCode as _PKCode
+            if isinstance(key, _PKey):
+                key_str = str(key).lower()
+                if key_str.startswith('key.f'):
+                    suffix = key_str.replace('key.f', '')
+                    if suffix.isdigit():
+                        return f"F{suffix}"
+                _special = {
+                    'key.delete': 'Del', 'key.insert': 'Ins',
+                    'key.home': 'Home', 'key.end': 'End',
+                    'key.page_up': 'PgUp', 'key.page_down': 'PgDown',
+                    'key.backspace': 'Backspace', 'key.tab': 'Tab',
+                    'key.space': 'Space', 'key.enter': 'Return',
+                    'key.num_lock': 'Num Lock',
+                }
+                return _special.get(key_str)
+            elif isinstance(key, _PKCode):
+                if key.char:
+                    c = key.char
+                    # When Ctrl is held, pynput reports control chars 0x01-0x1A
+                    # (Ctrl+A=\x01 ... Ctrl+Z=\x1A).  Decode back to the letter.
+                    if len(c) == 1 and 1 <= ord(c) <= 26:
+                        return chr(ord(c) + 64)  # \x01->A, \x02->B, etc.
+                    return c.upper()
+                elif hasattr(key, 'vk') and key.vk is not None:
+                    # Fallback: virtual-key code
+                    if 65 <= key.vk <= 90:   # A-Z
+                        return chr(key.vk)
+                    if 48 <= key.vk <= 57:   # 0-9
+                        return chr(key.vk)
+        except Exception:
+            pass
+        return None
+
+    def _emit_combo(self, key_name: str, held_mods: list = None):
+        """Build and emit the final combo string.  Must run on the Qt main thread."""
+        if not self._armed:
+            return  # already captured/disarmed; guard against pynput+Qt double-fire
+        if held_mods is None:
+            held_mods = sorted(self._held_modifiers)
+        parts = held_mods + [key_name]
+        combo = "+".join(parts)
+        # Silently reject system shortcuts and plain left/right clicks
+        if combo in self._BLACKLISTED:
+            self._disarm_capture()
+            return
+        self.setText(combo)
+        self.combo_captured.emit(combo)
+        self._disarm_capture()
 
     def keyPressEvent(self, event):
+        # Fallback for when pynput is not available
         if not self._armed:
             super().keyPressEvent(event)
             return
@@ -8296,9 +8527,7 @@ class KeyCaptureEdit(QLineEdit):
         if key in (Qt.Key_Control, Qt.Key_Alt, Qt.Key_Shift, Qt.Key_Meta):
             return  # Wait for a non-modifier key
         if key == Qt.Key_Escape:
-            self._armed = False
-            self.setPlaceholderText("Click here, then press your combo…")
-            self._highlight(False)
+            self._disarm_capture()
             return
         mods = event.modifiers()
         parts = []
@@ -8310,14 +8539,7 @@ class KeyCaptureEdit(QLineEdit):
             parts.append("Shift")
         key_name = QKeySequence(key).toString()
         if key_name:
-            parts.append(key_name)
-        combo = "+".join(parts)
-        if combo:
-            self.setText(combo)
-            self.combo_captured.emit(combo)
-        self._armed = False
-        self.setPlaceholderText("Click here, then press your combo…")
-        self._highlight(False)
+            self._emit_combo(key_name, parts)  # routes through blacklist check
 
     def _highlight(self, active: bool):
         if active:
@@ -8362,6 +8584,7 @@ class MainWindow(QMainWindow):
         # Initialize QSettings for persistence
         self.settings = QSettings("SlothMacro", "Sloth")
         self.hotkey_listener = None
+        self.mouse_hotkey_listener = None
         self.hotkey_bindings: Dict[str, bool] = {}
         self._hotkey_last_trigger: Dict[str, float] = {}
         self._hotkey_lock = threading.Lock()
@@ -9061,17 +9284,18 @@ class MainWindow(QMainWindow):
     def start_hotkey_listener(self):
         """Start global hotkey listener from saved profiles."""
         try:
-            from pynput import keyboard
+            from pynput import keyboard, mouse
         except ImportError:
             logger.warning("pynput not installed - global hotkeys disabled")
             return
 
         hotkeys = set()
+        # Collect all hotkey strings (e.g., "F5", "Ctrl+F8", "Mouse4", etc.)
         for profile in self._load_all_profiles():
-            if profile.hotkey and profile.actions:
-                key = profile.hotkey.strip().lower()
-                if key.startswith('f') and key[1:].isdigit() and 1 <= int(key[1:]) <= 12:
-                    hotkeys.add(key.upper())
+            if profile.hotkey and profile.hotkey != "None" and profile.actions:
+                key = profile.hotkey.strip()
+                if key:
+                    hotkeys.add(key)
 
         if self.hotkey_listener:
             try:
@@ -9080,30 +9304,38 @@ class MainWindow(QMainWindow):
                 pass
             self.hotkey_listener = None
 
+        if self.mouse_hotkey_listener:
+            try:
+                self.mouse_hotkey_listener.stop()
+            except Exception:
+                pass
+            self.mouse_hotkey_listener = None
+
         self.hotkey_bindings = {h: True for h in sorted(hotkeys)}
+        
+        # Start keyboard listener
         self.hotkey_listener = keyboard.Listener(
             on_press=self._on_global_key_press,
             on_release=self._on_global_key_release
         )
         self.hotkey_listener.daemon = True
         self.hotkey_listener.start()
+        
+        # Start mouse listener for mouse button hotkeys
+        self.mouse_hotkey_listener = mouse.Listener(
+            on_click=self._on_global_mouse_click
+        )
+        self.mouse_hotkey_listener.daemon = True
+        self.mouse_hotkey_listener.start()
+        
         if self.hotkey_bindings:
             logger.info(f"Global hotkeys started: {', '.join(self.hotkey_bindings.keys())}")
         else:
             logger.info("Global hotkey listener started (no profile hotkeys configured)")
 
-    def _extract_hotkey_from_key(self, key) -> Optional[str]:
-        """Extract F-key hotkey text from pynput key object."""
-        key_str = str(key).lower()
-        if key_str.startswith('key.f'):
-            suffix = key_str.replace('key.f', '')
-            if suffix.isdigit() and 1 <= int(suffix) <= 12:
-                return f"F{int(suffix)}"
-        return None
-
     def _extract_key_name(self, key) -> Optional[str]:
-        """Extract a display-style key name from a pynput key for purge hotkey matching.
-        Covers F1-F12, common special keys, and character keys.
+        """Extract a display-style key name from a pynput key for hotkey matching.
+        Covers F-keys, common special keys, and character keys (A-Z, 0-9).
         Returns a string like 'F9', 'Del', 'A', '5', etc. or None."""
         try:
             from pynput.keyboard import Key as _PKey, KeyCode as _PKCode
@@ -9111,7 +9343,7 @@ class MainWindow(QMainWindow):
                 key_str = str(key).lower()
                 if key_str.startswith('key.f'):
                     suffix = key_str.replace('key.f', '')
-                    if suffix.isdigit() and 1 <= int(suffix) <= 12:
+                    if suffix.isdigit() and 1 <= int(suffix) <= 24:
                         return f"F{int(suffix)}"
                 _special = {
                     'key.delete': 'Del', 'key.insert': 'Ins',
@@ -9122,8 +9354,20 @@ class MainWindow(QMainWindow):
                     'key.enter': 'Return', 'key.num_lock': 'Num Lock',
                 }
                 return _special.get(key_str)
-            elif isinstance(key, _PKCode) and key.char:
-                return key.char.upper()
+            elif isinstance(key, _PKCode):
+                if key.char:
+                    c = key.char
+                    # When Ctrl is held, pynput reports control chars 0x01-0x1A
+                    # (Ctrl+A=\x01 ... Ctrl+Z=\x1A).  Decode back to the letter.
+                    if len(c) == 1 and 1 <= ord(c) <= 26:
+                        return chr(ord(c) + 64)  # \x01->A, \x02->B, etc.
+                    return c.upper()
+                elif hasattr(key, 'vk') and key.vk is not None:
+                    # Fallback: use virtual-key code for keys where .char is None
+                    if 65 <= key.vk <= 90:   # A-Z
+                        return chr(key.vk)
+                    if 48 <= key.vk <= 57:   # 0-9
+                        return chr(key.vk)
         except Exception:
             pass
         return None
@@ -9134,54 +9378,64 @@ class MainWindow(QMainWindow):
         try:
             from pynput.keyboard import Key as _PKey
             if key in (_PKey.ctrl_l, _PKey.ctrl_r, _PKey.ctrl):
-                self._held_modifiers.add('ctrl')
+                with self._hotkey_lock:
+                    self._held_modifiers.add('ctrl')
                 return
             if key in (_PKey.alt_l, _PKey.alt_r, _PKey.alt):
-                self._held_modifiers.add('alt')
+                with self._hotkey_lock:
+                    self._held_modifiers.add('alt')
                 return
             if key in (_PKey.shift_l, _PKey.shift_r, _PKey.shift):
-                self._held_modifiers.add('shift')
+                with self._hotkey_lock:
+                    self._held_modifiers.add('shift')
                 return
         except Exception:
             pass
 
-        # Check purge hotkey first using general key extraction (works for any key, not just F-keys)
+        # Extract key name for any key (F-keys, letters, numbers, special keys, etc.)
         key_name = self._extract_key_name(key)
-        if key_name:
-            mods = sorted(self._held_modifiers)
-            combo = "+".join(m.capitalize() for m in mods) + ("+" if mods else "") + key_name
-            purge_key = self.settings.value("purge_hotkey", "None")
-            if purge_key != "None" and combo.upper() == purge_key.upper():
-                logger.info(f"Purge hotkey triggered by {combo}")
-                self.purge_signal.emit()
-                return
-
-        # Snapshot reference atomically - avoids a race with start_hotkey_listener()
-        # replacing the dict on the main thread while we iterate it here.
-        bindings = self.hotkey_bindings
-        hotkey = self._extract_hotkey_from_key(key)
-        if hotkey:
-            # Build a combo string including any currently held modifier keys
-            mods = sorted(self._held_modifiers)  # deterministic: ['alt', 'ctrl', 'shift']
-            combo = "+".join(m.capitalize() for m in mods) + ("+" if mods else "") + hotkey
-
-            # Check emergency stop
-            estop_key = self.settings.value("emergency_stop_key", "F12")
-            if estop_key != "None" and hotkey == estop_key:
-                if self.editor_page.executor and self.editor_page.executor.isRunning():
-                    logger.info(f"Emergency stop triggered by {hotkey}")
-                    self.emergency_stop_signal.emit()  # thread-safe cross-thread stop
-                    return  # stop consumed the key; don't also trigger a profile
-                # Macro not running - fall through so the key can trigger a profile
-        if not hotkey or hotkey not in bindings:
+        if not key_name:
             return
+        
+        # Build combo string with modifiers (thread-safe read)
+        with self._hotkey_lock:
+            mods = sorted(self._held_modifiers)  # deterministic: ['alt', 'ctrl', 'shift']
+        combo = "+".join(m.capitalize() for m in mods) + ("+" if mods else "") + key_name
+        
+        # Check purge hotkey first
+        purge_key = self.settings.value("purge_hotkey", "None")
+        if purge_key != "None" and combo.upper() == purge_key.upper():
+            logger.info(f"Purge hotkey triggered by {combo}")
+            self.purge_signal.emit()
+            return
+
+        # Check emergency stop
+        estop_key = self.settings.value("emergency_stop_key", "F12")
+        if estop_key != "None" and combo.upper() == estop_key.upper():
+            if self.editor_page.executor and self.editor_page.executor.isRunning():
+                logger.info(f"Emergency stop triggered by {combo}")
+                self.emergency_stop_signal.emit()  # thread-safe cross-thread stop
+                return  # stop consumed the key; don't also trigger a profile
+            # Macro not running - fall through so the key can trigger a profile
+        
+        # Check profile hotkeys - snapshot reference atomically
+        bindings = self.hotkey_bindings
+        if combo not in bindings:
+            # Debug logging for troubleshooting
+            if mods:  # Only log combos with modifiers to avoid spam
+                logger.debug(f"Hotkey combo '{combo}' not in bindings. Registered: {list(bindings.keys())}")
+            return
+        
+        # Debounce: prevent rapid repeated triggers
         with self._hotkey_lock:
             now = time.time()
-            last = self._hotkey_last_trigger.get(hotkey, 0)
+            last = self._hotkey_last_trigger.get(combo, 0)
             if now - last < 0.35:
                 return
-            self._hotkey_last_trigger[hotkey] = now
-        self.hotkey_triggered.emit(hotkey)
+            self._hotkey_last_trigger[combo] = now
+        
+        logger.debug(f"Hotkey triggered: {combo}")
+        self.hotkey_triggered.emit(combo)
 
     def _on_global_key_release(self, key):
         """Clear tracked modifier key state on release."""
@@ -9196,6 +9450,55 @@ class MainWindow(QMainWindow):
                     self._held_modifiers.discard('shift')
         except Exception:
             pass
+
+    def _on_global_mouse_click(self, x, y, button, pressed):
+        """Handle global mouse button events for configured profile hotkeys."""
+        if not pressed:
+            return  # Only trigger on button press, not release
+        
+        try:
+            from pynput.mouse import Button
+            
+            # Map mouse buttons to readable names
+            mouse_names = {
+                Button.left: 'Left',
+                Button.right: 'Right',
+                Button.middle: 'Middle',
+            }
+            
+            # Handle side buttons (Mouse4/Mouse5)
+            btn_str = str(button).lower()
+            if 'x1' in btn_str or 'button.x1' in btn_str:
+                mouse_name = 'Mouse4'
+            elif 'x2' in btn_str or 'button.x2' in btn_str:
+                mouse_name = 'Mouse5'
+            else:
+                mouse_name = mouse_names.get(button)
+            
+            if not mouse_name:
+                return
+            
+            # Build combo string with modifiers (thread-safe read)
+            with self._hotkey_lock:
+                mods = sorted(self._held_modifiers)
+            combo = "+".join(m.capitalize() for m in mods) + ("+" if mods else "") + mouse_name
+            
+            # Check if this combo is a registered hotkey
+            bindings = self.hotkey_bindings
+            if combo not in bindings:
+                return
+            
+            # Debounce: prevent rapid repeated triggers
+            with self._hotkey_lock:
+                now = time.time()
+                last = self._hotkey_last_trigger.get(combo, 0)
+                if now - last < 0.35:
+                    return
+                self._hotkey_last_trigger[combo] = now
+            
+            self.hotkey_triggered.emit(combo)
+        except Exception as e:
+            logger.debug(f"Error in mouse hotkey handler: {e}")
 
     def _run_profile_for_hotkey(self, hotkey: str):
         """Execute or stop profile mapped to pressed hotkey (toggle behavior)."""
@@ -9258,6 +9561,8 @@ class MainWindow(QMainWindow):
                     executor.wait(3000)
             if self.hotkey_listener:
                 self.hotkey_listener.stop()
+            if self.mouse_hotkey_listener:
+                self.mouse_hotkey_listener.stop()
             # Close standalone toolbar (it has no Qt parent so won't close automatically)
             if hasattr(self, 'macro_toolbar') and self.macro_toolbar:
                 try:
@@ -9406,7 +9711,13 @@ class MainWindow(QMainWindow):
             return
         try:
             profiles_dir = self.backup_manager.profiles_dir
+            safe_root = Path(profiles_dir).resolve()
             with zipfile.ZipFile(zip_path, 'r') as z:
+                # Guard against ZipSlip: reject any entry that would escape profiles_dir
+                for member in z.infolist():
+                    dest = (safe_root / member.filename).resolve()
+                    if not str(dest).startswith(str(safe_root)):
+                        raise ValueError(f"Unsafe path in backup ZIP: {member.filename}")
                 z.extractall(profiles_dir)
             self.profile_page.refresh_profile_list()
             self.start_hotkey_listener()
